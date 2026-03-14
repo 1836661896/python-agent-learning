@@ -36,27 +36,39 @@ def handle_message(command: str) -> None:
 def handle_quit(command: str) -> None:
     show_message(command)
 
+def handle_echo(command: str) -> None:
+    parts = command.split(" ")
+    if len(parts) == 1:
+        print("")
+    else:
+        echo_message = " ".join(parts[1:])
+        print(echo_message)
+
 
 COMMAND_HANDLERS = {
     "help": handle_help,
-    "version": handle_version
+    "version": handle_version,
+    "echo": handle_echo
 }
 
 
 def handle_command(command: str) -> bool:
     """处理一条用户输入，返回是否继续循环"""
-    if command in COMMAND_HANDLERS:
-        COMMAND_HANDLERS[command](command)
+    if command == "quit":
+        handle_quit("quit")
+        return False
+    elif command.startswith("echo"):
+        handle_echo(command)
         return True
     elif command.startswith("/"):
         handle_invalid("invalid_command")
         return True
-    elif command != "quit":
-        handle_message(command)
+    elif command in COMMAND_HANDLERS:
+        COMMAND_HANDLERS[command](command)
         return True
     else:
-        handle_quit("quit")
-        return False
+        handle_message(command)
+        return True
 
 def main():
     show_message("welcome")
