@@ -1,0 +1,4 @@
+# Python Agent 学习项目依赖
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0

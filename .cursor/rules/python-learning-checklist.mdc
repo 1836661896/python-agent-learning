@@ -1,0 +1,215 @@
+---
+description: Python 知识点学习清单，用于项目驱动学习时对照与标注进度，避免遗漏。状态：未学 | 进行中 | 已学
+alwaysApply: true
+---
+
+# Python 学习目标清单
+
+> **用途**：完善项目功能时对照本清单，优先把「未学」或「进行中」的知识点融入当前任务；长时间学习后助手需检查是否仍有「未学」未覆盖。  
+> **状态图例**：`[未学]` `[进行中]` `[已学]` —— 请在教到或练到某条时更新为对应状态。
+
+---
+
+## 1. 基础语法与数据类型
+
+| 知识点 | 状态 | 备注（在项目中的使用处） |
+|--------|------|--------------------------|
+| 变量与赋值 | [已学] | main.py 中的变量、常量 |
+| 数据类型：str, int, float, bool | [已学] | 字符串命令、数字等 |
+| **列表 list** | | |
+| 创建、索引 list[i]、切片 list[a:b]、len(list) | [已学] | TASKS、echo 的 parts |
+| list.append(x) / list.extend(iterable) | [已学] | 计划用于 add 任务 |
+| list.insert(i, x) / list.remove(x) / list.pop([i]) | [未学] | |
+| list.index(x) / list.count(x) | [未学] | |
+| 遍历 for x in list、for i, x in enumerate(list) | [已学] | handle_help 等 |
+| **字典 dict** | | |
+| 创建、访问 d[key]、d.get(key[, default]) | [已学] | HELP_MESSAGE, SYSTEM_MESSAGE |
+| d.keys() / d.values() / d.items() | [已学] | handle_help 遍历 |
+| 修改、del d[key]、key in d | [未学] | |
+| **其他类型** | | |
+| 元组 tuple | [未学] | |
+| 集合 set | [未学] | |
+| 空值 None | [未学] | |
+| 类型检查 type() | [未学] | |
+| 注释与 docstring | [进行中] | handle_command 等已有 docstring，可系统讲 |
+
+---
+
+## 2. 运算符与表达式
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| 算术运算符 + - * / // % ** | [未学] | |
+| 比较运算符 == != < > <= >= | [已学] | 控制流、条件判断中已用 |
+| 逻辑运算符 and, or, not | [已学] | 条件组合 |
+| 成员运算符 in | [未学] | |
+| 身份运算符 is / is not | [未学] | |
+| 条件表达式（三元） x if cond else y | [未学] | |
+
+---
+
+## 3. 控制流
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| if / elif / else | [已学] | handle_command 等 |
+| for 循环（遍历序列、range） | [已学] | handle_help 等 |
+| while 循环 | [已学] | main 中的主循环 |
+| break / continue | [已学] | 循环控制 |
+| 嵌套循环 | [未学] | |
+
+---
+
+## 4. 函数
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| 函数定义 def、缩进与函数体 | [已学] | handle_* 系列 |
+| 位置参数、默认参数 | [进行中] | 可在 list/add 中系统讲 |
+| 关键字参数 | [未学] | |
+| 返回值 return | [已学] | handle_command 返回 bool |
+| 文档字符串 docstring | [进行中] | 可统一规范 |
+| *args / **kwargs | [未学] | |
+| lambda 表达式 | [未学] | |
+| 作用域与 global | [未学] | 若 TASKS 用全局则需讲 |
+
+---
+
+## 5. 字符串与常用方法
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| **分割与拼接** | | |
+| str.split(sep, maxsplit) | [已学] | 命令解析、echo 解析 |
+| str.join(iterable) | [已学] | " ".join(parts[1:]) 等 |
+| **大小写与空白** | | |
+| str.upper() / str.lower() | [未学] | |
+| str.capitalize() / str.title() | [未学] | |
+| str.strip() / str.lstrip() / str.rstrip() | [已学] | 命令输入 command.strip() |
+| **查找与替换** | | |
+| str.replace(old, new[, count]) | [未学] | |
+| str.find(sub) / str.index(sub) | [未学] | |
+| str.startswith(prefix) / str.endswith(suffix) | [已学] | command.startswith("echo") 等 |
+| **判断类** | | |
+| str.isdigit() / str.isalpha() / str.isspace() | [未学] | |
+| **格式化** | | |
+| f-string（f"…{x}…"） | [已学] | print(f"…") |
+| str.format() | [未学] | |
+| **长度与索引** | | |
+| len(str) | [已学] | |
+| 索引 str[i]、切片 str[start:end:step] | [已学] | 序列通用 |
+
+---
+
+## 5.5 内置函数（不依赖 import）
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| **输入输出** | | |
+| print() / input() | [已学] | 主循环、提示 |
+| **类型与转换** | | |
+| int() / float() / str() / list() / dict() / tuple() / set() / bool() | [未学] | |
+| **序列与迭代** | | |
+| len() | [已学] | 列表、字符串长度等 |
+| range(stop) / range(start, stop[, step]) | [已学] | for 循环 |
+| enumerate(iterable) | [已学] | list 命令带序号：enumerate(TASK_LIST, 1) |
+| zip(iter1, iter2, ...) | [未学] | 并行遍历 |
+| sorted(iterable) / reversed(iterable) | [未学] | |
+| **其他常用** | | |
+| min() / max() / sum() / abs() / round() | [未学] | |
+| type(x) / isinstance(x, Type) | [未学] | 类型检查 |
+| open() 打开文件 | [未学] | 与 文件与 IO 一起讲 |
+| iter() / next() | [未学] | 迭代器 |
+
+---
+
+## 6. 模块与包
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| import 与 from ... import | [已学] | main.py 从 commands 导入 show_message, handle_command |
+| __init__.py 与包结构 | [未学] | basics 已有，可讲 |
+| 相对导入 . / .. | [未学] | |
+
+---
+
+## 7. 异常处理
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| try / except 基本语法 | [未学] | 可放在 input/解析 处讲 |
+| 捕获特定异常类型 | [未学] | |
+| else / finally 子句 | [未学] | |
+| raise 抛出异常 | [未学] | |
+
+---
+
+## 8. 文件与 IO
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| open / read / write / close | [已学] | 任务持久化：with open 读/写 tasks.json |
+| with 上下文管理器 | [已学] | 同上 |
+| 路径 pathlib 或 os.path | [未学] | |
+
+---
+
+## 9. 常用标准库（需 import）
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| **系统与路径** | | |
+| os（环境变量、当前目录、路径拼接、执行命令） | [未学] | |
+| sys（argv、stdin/stdout、exit、版本） | [未学] | |
+| pathlib.Path（面向对象路径操作） | [未学] | 推荐替代 os.path |
+| **数据与文本** | | |
+| json（loads / dumps 序列化与反序列化） | [已学] | 任务持久化：loads 读入、dumps 写入 |
+| re（正则表达式：match、search、findall、sub） | [未学] | 文本匹配与提取 |
+| **时间与日志** | | |
+| datetime（日期时间、格式化、加减） | [已学] | time 命令：datetime.now()、strftime |
+| logging（日志级别、输出到文件/控制台） | [已学] | main/commands 中 basicConfig、logger.info |
+| **命令行与结构** | | |
+| argparse（命令行参数解析） | [未学] | 脚本入口 |
+| collections（defaultdict、Counter、deque） | [未学] | 常用数据结构 |
+| itertools（链式迭代、组合、排列等） | [未学] | 迭代器工具 |
+| random（随机数、抽样、shuffle） | [未学] | |
+| functools（partial、reduce 等） | [未学] | 函数式工具 |
+
+---
+
+## 10. 常见第三方库（pip install）
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| **Web 与 API** | | |
+| FastAPI / Flask（Web 框架、写 API） | [已学] | src/api.py：GET /health、POST /tasks |
+| requests（发 HTTP 请求、调外部 API） | [未学] | |
+| **配置与测试** | | |
+| python-dotenv（读 .env 配置） | [未学] | |
+| pytest（单元测试、用例组织） | [未学] | 工程化阶段 |
+| **自动化与视觉（项目后期）** | | |
+| pyautogui / pygetwindow（键鼠、窗口） | [未学] | 阶段 B/C |
+| Pillow / OpenCV（图像处理、识别） | [未学] | 阶段 C |
+| **数据处理（可选）** | | |
+| pandas（表格、数据分析） | [未学] | 按需 |
+
+---
+
+## 11. 项目与工程化
+
+| 知识点 | 状态 | 备注 |
+|--------|------|------|
+| 虚拟环境 venv | [已学] | 已创建 .venv |
+| requirements.txt | [已学] | 已创建（阶段 2b），阶段 3 将加入 fastapi、uvicorn |
+| 项目结构与命名规范 | [进行中] | src、main 等已用 |
+| pip install / 依赖管理 | [未学] | |
+
+---
+
+## 使用说明（给助手）
+
+- **先确认当前阶段**：当前应做哪一阶段、对应哪些清单章节，见 `python-study-plan.mdc` 中的「按难易程度的项目推进顺序」表及各阶段的「主要涉及清单章节」。新对话或换设备时请先读 `readme.md` 与 study-plan，再据此选择要融入的知识点。
+- 在**设计下一步教学或功能**时：优先选择标为 `[未学]` 或 `[进行中]` 的知识点，通过**当前阶段项目功能**穿插讲解（如 list/add、命令解析、异常处理）。
+- **常用方法不必一次练完**：每个方法/知识点应在**项目需要时**才引入，不要在某一次教学中集中讲完某一整类（例如不必一次讲完所有字符串方法）。清单用于在项目推进过程中**分散、按需**覆盖，而非单日集中练习。
+- **完成某知识点教学或实践后**：在本文件中将该条状态更新为 `[已学]` 或 `[进行中]`，并在「备注」列简要写上在项目中的使用处（可选）。
+- 若用户从网络补充了其他学习清单，可合并进本表并统一使用上述状态标注。

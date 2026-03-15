@@ -3,94 +3,104 @@
 > 这是用于在多台设备之间同步学习进度的文档。  
 > 每次提交代码前，都会先由助手提示我更新这里的记录。
 
+**给助手（新对话 / 换设备时）**：请先阅读本文件 + `.cursor/rules/python-study-plan.mdc` + `.cursor/rules/python-learning-checklist.mdc`，以了解：项目目标与学习方式、当前阶段与「下一次学习的起点」、知识点清单与状态。然后按「当前建议」阶段（见下方项目推进计划表）继续教学，知识点按需分散引入、不必一次练完整类方法。
+
+**换设备后快速清单**：① `git pull` ② `source .venv/bin/activate`（Windows 用 `.venv\Scripts\activate`）③ 若 `delete` 未完成，先补全 `src/commands.py` 的 `delete_task` ④ 再选「阶段 4」或「完善 API/前端」（见下方「下一次学习的起点」）。
+
 ---
 
 ## 基本项目信息
 
 - **项目名称**：Python Agent 学习项目（后端部分）
-- **当前阶段**：阶段 1（Python 语言基础）进行中
-  - ✅ 阶段 0（环境与项目骨架）已完成
-  - 🔄 阶段 1（Python 语言基础）进行中：已完成变量、数据类型、控制流学习
+- **当前阶段**：阶段 3（Web API）已完成 — 下一步做阶段 4（Agent 工具系统）或启动前端
+  - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks，与命令行共用 TASK_LIST）
+  - 🔄 下一步：阶段 4（Task/Step 结构、工具封装）或启动 React 前端联调
 - **主要目标**：
   - 搭建命令行 Agent 雏形（支持基础命令）✅
-  - 系统学习 Python 基础语法 🔄
-  - 为后续 Web 后端 + 自动化 + 视觉识别打基础
+  - Web API（FastAPI）与命令行共用逻辑 ✅
+  - 按难易顺序推进项目（详见下方「项目推进计划」）🔄
+  - 为前端联调 + 自动化 + 视觉识别打基础
 
 ---
 
-## 最近一次学习（日期：2026-01-XX）
+## 关联项目（前端）
+
+- **前端项目地址**：与本 backend 同级的 **frontend** 目录。
+  - 相对路径（从本仓库根目录）：**`../frontend`** 或 **`frontend`**（若在 myproject 下则为 **`myproject/frontend`**）。
+  - 常用绝对路径示例：**`/Users/mrsun/Documents/myproject/frontend`**（以你本机为准）。
+- **用途**：React 前端，与本文档描述的后端 API 联调；前端进度与规则见 **frontend/readme.md**、**frontend/.cursor/rules/frontend-project-goal.mdc**。
+- **助手约定**：用户提及「前端」「frontend」「前端项目」时，优先到上述 frontend 目录查找规则与 readme。
+
+---
+
+## 最近一次学习（日期：2026-03-13）
 
 ### 已完成内容
 
-- **环境相关**
-  - ✅ 已在本项目下创建虚拟环境 `.venv`，并能正常激活。
-  - ✅ 已在 `src` 目录下创建 `main.py`，作为程序入口。
+- **环境与命令行（阶段 0）**
+  - ✅ 虚拟环境 `.venv`、`src/main.py`、命令行循环、help/version/echo/quit。
 
-- **命令行程序（阶段 0 完成）**
-  - ✅ 实现了一个基础的命令行循环：
-    - 显示欢迎语和提示语（欢迎来到 Python Agent 学习项目、输入命令，输入 quit 退出）。
-    - 支持多轮输入，`quit` 退出程序。
-  - ✅ 抽象出了多种处理函数和配置：
-    - `HELP_MESSAGE`：保存各个命令的说明（包括 `help`、`version`、`quit`、`echo`）。
-    - `SYSTEM_MESSAGE`：保存系统固定文案（欢迎语、提示语、版本号、未知命令提示等）。
-    - `handle_help` / `handle_version` / `handle_message` / `handle_quit` / `handle_echo` 等函数。
-    - `COMMAND_HANDLERS`：使用字典映射命令到处理函数。
-  - ✅ **echo 命令已完成**：
-    - 实现了 `handle_echo(command: str)` 函数，支持解析 `echo xxx` 并回显后面的内容。
-    - 已在 `handle_command` 中接入 `echo` 命令的分支判断（使用 `command.startswith("echo")`）。
-    - 支持 `echo` 单独输入（输出空行）和 `echo hello world`（输出后面的内容）。
+- **阶段 1a～1d**
+  - ✅ **list / add**：内存任务列表，`TASK_LIST`、`handle_task`、`add_task`，list 空时提示「暂无任务」，add 后提示成功。
+  - ✅ **异常与 Ctrl+C**：主循环 try/except，KeyboardInterrupt/EOFError 时提示「确认要退出？输入 y」，再次 Ctrl+C 视为不退出。
+  - ✅ **time 命令**：`datetime.now()`、`strftime("%Y-%m-%d %H:%M:%S")`。
+  - ✅ **list 带序号**：`enumerate(TASK_LIST, 1)`，输出 `1. xxx`。
+  - ✅ **命令去首尾空格**：`command.strip()`。
+  - ✅ **模块拆分**：命令逻辑迁至 `src/commands.py`，main.py 通过 `from commands import show_message, handle_command, save_tasks` 使用。
 
-- **Python 语法基础学习（阶段 1 进行中）**
-  - ✅ 创建了 `src/basics/` 模块目录结构：
-    - `__init__.py`：标识为 Python 包。
-    - `01_variables.py`：变量与数据类型练习文件。
-    - `02_control_flow.py`：控制流练习文件。
-  - ✅ **变量与数据类型**（`01_variables.py`）：
-    - 学习了变量赋值和命名规范。
-    - 字符串类型：基本操作（`upper()`, `lower()`, `capitalize()`）、f-string 格式化。
-    - 数字类型：整数（int）和浮点数（float）的区别与运算。
-    - 列表（List）：创建、索引访问（包括负数索引 `[-1]`）、切片操作（`[:2]`, `[1:]`）、`append()` 方法。
-    - 字典（Dictionary）：创建、访问、修改、获取键值对（`keys()`, `values()`, `items()`）。
-    - 类型检查：使用 `type()` 函数查看变量类型。
-  - ✅ **控制流**（`02_control_flow.py`）：
-    - 条件判断：`if`、`if-else`、`if-elif-else` 多条件判断。
-    - 比较运算符：`==`、`!=`、`<`、`>`、`<=`、`>=`。
-    - `for` 循环：
-      - 遍历列表、字典（键、值、键值对）。
-      - `range()` 函数的用法：`range(5)`、`range(1, 5)`、`range(0, 10, 2)`。
-    - `while` 循环：基本用法和条件控制。
-    - 循环控制：`break`（跳出循环）和 `continue`（跳过当前迭代）。
-    - 嵌套循环：多层循环的用法（如打印乘法表）。
+- **阶段 2a～2b**
+  - ✅ **任务持久化**：`tasks.json`，启动时 `json.loads` 加载，add 或退出时 `json.dumps` 写回，`with open` 读写。
+  - ✅ **工程化**：`requirements.txt`，`logging.basicConfig` 与 `logger.info`（启动、加载/保存任务、添加任务、退出时打日志）。
+
+- **阶段 3（Web API）**
+  - ✅ **FastAPI**：`src/api.py`，GET /health，POST /tasks（TaskCreate + field_validator、try/except + logger），与命令行共用 TASK_LIST、save_tasks；uvicorn 启动。
+
+- **任务列表与删除（阶段 1/3 扩展）**
+  - ✅ **TASK_LIST 结构**：改为存字典 `{"task_id": int, "task_name": str}`，自增 task_id，add 时判重（`any(t["task_name"] == ...)`）。
+  - 🔄 **delete 命令**：逻辑与写法已确定（find-then-remove 或 for+enumerate+pop，删除后 save_tasks、有/无分别提示）；若 `commands.py` 里 `delete_task` 尚未补全，换设备后先补全再继续。
+  - ✅ **echo 修复**：handle_echo 直接打印 adjust_command 的返回值，避免对字符串做 [1:] 和 join 导致重复字符丢失。
+  - ✅ **知识点**：列表 pop/remove、列表推导式过滤删除、生成器与 any()、next(... None) 查单条、find-then-remove 与 Python 常见写法。
+
+---
+
+## 项目推进计划（按难易：易→中→较难→难）
+
+> 详细阶段说明与清单对照见 **`.cursor/rules/python-study-plan.mdc`**；知识点进度见 **`.cursor/rules/python-learning-checklist.mdc`**。
+
+| 顺序 | 阶段 | 难易 | 项目功能 |
+|------|------|------|----------|
+| 0 | 阶段 0：环境与骨架 | 易 | ✅ 环境、命令行、help/version/echo |
+| 1a | 阶段 1a：基础巩固 | 易 | ✅ list / add 命令（内存任务列表） |
+| 1b | 阶段 1b：异常与健壮性 | 易 | ✅ try/except、Ctrl+C 确认退出 |
+| 1c | 阶段 1c：更多命令与内置 | 易~中 | ✅ time、strip、enumerate |
+| 1d | 阶段 1d：模块与包 | 中 | ✅ commands 模块、import |
+| 2a | 阶段 2a：文件与 IO | 中 | ✅ 任务持久化 tasks.json、with、json |
+| 2b | 阶段 2b：工程化 | 中 | ✅ requirements.txt、logging |
+| 3 | 阶段 3：Web API | 较难 | ✅ FastAPI /health、POST /tasks |
+| 4 | 阶段 4：Agent 工具系统 | 较难 | Task/Step 结构、工具封装 ← **当前建议** |
+| 5 | 阶段 5：自动化与视觉 | 难 | 截屏、键鼠、图像识别（预研） |
 
 ---
 
 ## 下一次学习的起点（提醒未来的自己）
 
-下次打开这个项目时，可以从下面这几步继续：
+**换设备后**：`git pull` 拉取最新代码，激活虚拟环境（`source .venv/bin/activate`），然后按下面顺序来。
 
-1. **继续阶段 1：Python 语法基础**
-   - **函数定义与调用**：
-     - 创建 `03_functions.py` 练习文件。
-     - 学习函数定义语法：`def function_name(parameters):`
-     - 学习参数传递：位置参数、默认参数、关键字参数。
-     - 学习返回值：`return` 语句的使用。
-     - 学习函数文档字符串（docstring）。
-   - **异常处理**：
-     - 创建 `04_exceptions.py` 练习文件。
-     - 学习 `try-except` 基本语法。
-     - 学习捕获特定异常类型。
-     - 学习 `finally` 和 `else` 子句。
-     - 在命令行程序中应用异常处理（例如：处理用户输入错误）。
+1. **先检查并补全 delete 命令（若未完成）**
+   - 打开 `src/commands.py` 中的 `delete_task`：若仍是「生成器 + print(isIn)、删除逻辑被注释」的状态，需先补全。
+   - 推荐写法：`task_id` 需转为 int（若从 adjust_command 得到的是字符串）；用 `for i, t in enumerate(TASK_LIST): if t["task_id"] == task_id: TASK_LIST.pop(i); save_tasks(); print("已删除"); return`，循环外 `print("未找到该任务")`。或在 main 里对 delete 分支把 `adjust_command` 得到的内容转成 int 再传。
+   - 补全后再选下面 2 或 3 继续。
 
-2. **巩固已学内容**
-   - 运行并测试 `01_variables.py` 和 `02_control_flow.py`，确保理解所有示例。
-   - 尝试修改练习文件，添加自己的测试用例。
-   - 思考如何将这些基础语法应用到 `main.py` 的命令处理逻辑中。
+2. **阶段 4：Agent 工具系统**
+   - 定义 Task/Step 数据结构（类或 dataclass），将 list、add、delete、time、echo 等命令封装为「工具」，统一命令解析与日志。
+   - 对应清单 §4 进阶、§9 logging。
 
-3. **准备阶段 2：项目结构与依赖管理**
-   - 了解 `requirements.txt` 的作用和基本格式。
-   - 学习 Python 的日志模块（`logging`）基础用法。
-   - 为项目添加简单的日志记录功能。
+3. **或继续完善 API 与前端**
+   - 后端补 GET /tasks、按 id 的 GET/PUT/DELETE，与前端联调。
+
+4. **查阅**
+   - 完整阶段说明与清单章节对照：`.cursor/rules/python-study-plan.mdc`
+   - 知识点是否已学/未学：`.cursor/rules/python-learning-checklist.mdc`
 
 ---
 
@@ -104,7 +114,7 @@
    - 在“下一次学习的起点”中写上下一次要做的 2～3 个小目标。
 
 2. **确认内容已经保存**
-   - 确认 `README.md` 已保存（Ctrl+S / Cmd+S）。
+   - 确认 `readme.md` 已保存（Ctrl+S / Cmd+S）。
 
 3. **再执行 git 提交**
    - 例如：
@@ -139,6 +149,16 @@
 - `src/main.py`：命令行程序，支持 `help`、`version`、`echo`、`quit` 命令
 - `src/basics/01_variables.py`：变量与数据类型练习（109 行）
 - `src/basics/02_control_flow.py`：控制流练习（127 行）
+
+---
+
+### 2026-03-13（本次）
+
+**主要成果**：
+- ✅ **TASK_LIST** 改为 dict 结构（task_id、task_name），add 判重、自增 id。
+- ✅ **delete 命令**：按 task_id 删除，采用 find-then-remove（或 for+enumerate+pop），删除后 save_tasks。
+- ✅ **echo 输出修复**：handle_echo 直接打印 adjust_command 返回值，解决重复字符丢失问题。
+- ✅ **巩固**：列表 pop/remove、列表推导式、生成器与 any()、next(..., None)、Python 常见删除写法。
 
 ---
 
