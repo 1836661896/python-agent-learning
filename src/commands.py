@@ -93,13 +93,21 @@ def add_task(command: str) -> None:
             logger.info("添加任务： %s", task_content)
             print("任务添加成功")
 
-# def delete_task(command: str) -> None:
-#     task_id = adjust_command(command)
-#     if task_id:
-#         isIn = (t["task_id"] == task_id for t in TASK_LIST)
-#         print(isIn)
-        # if any(t["task_id"] == task_id for t in TASK_LIST):
-            
+def delete_task(command: str) -> None:
+    task_id_str = adjust_command(command)
+    if task_id_str:
+        try:
+            task_id = int(task_id_str)
+            if any(t["task_id"] == task_id for t in TASK_LIST):
+                task_name = next((t["task_name"] for t in TASK_LIST if t["task_id"] == task_id), None)
+                TASK_LIST[:] = [t for t in TASK_LIST if t["task_id"] != task_id]
+                save_tasks()
+                logger.info("删除任务：任务id %s，任务名称： %s", task_id, task_name )
+                print("删除任务成功")
+            else:
+                print("没有找到任务")
+        except ValueError:
+            print("数据格式异常")
 
 # 展示系统消息
 def show_message(command: str) -> None:
@@ -160,6 +168,7 @@ def handle_command(command: str) -> bool:
         return True
     elif command.startswith("delete"):
         delete_task(command)
+        return True
     elif command.startswith("/"):
         handle_invalid("invalid_command")
         return True

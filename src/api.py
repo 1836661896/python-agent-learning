@@ -29,18 +29,43 @@ app.add_middleware(
 def health():
     return {"status": "ok"}
 
+# 获取任务列表
+@app.get("/tasks")
+def get_task_list():
+    return TASK_LIST if TASK_LIST else []
+
 # 添加任务接口
 @app.post("/tasks")
 def create_task(body: TaskCreate):
     try:
         description = body.description
-        TASK_LIST.append(description)
+        if len(TASK_LIST):
+            TASK_LIST.append(
+                {
+                    "task_id": TASK_LIST[-1]["task_id"] + 1,
+                    "task_name": description
+                }
+            )
+        else:
+            TASK_LIST.append(
+                {
+                    "task_id": 1,
+                    "task_name": description
+                }
+            )
         save_tasks()
-        return {"id": len(TASK_LIST), "description": description}
+        return TASK_LIST[-1]
     except Exception as e:
         logger.error("添加任务失败: %s", e)
         raise HTTPException(status_code=500, detail="添加任务失败")
 
-# 
 # 删除任务接口
-# @app.delete("task/{task_id}")
+@app.delete("/tasks/{task_id}")
+def delete_task(task_id: int):
+    if any(t["task_id"] == task_id for t in TASK_LIST):
+        TASK_LIST[:] = [t for t in TASK_LIST if t["task_id"] != task_id]
+        save_tasks()
+        return "删除任务成功"
+    else:
+        return "没有找到任务"
+    

@@ -5,7 +5,12 @@ from commands import show_message, handle_command, save_tasks
 import logging
 
 def main():
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, 
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        filename="app.log",
+        encoding="utf-8"
+    )
     logging.info("程序启动")
     show_message("welcome")
     show_message("hint")
