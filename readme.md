@@ -33,7 +33,7 @@
 
 ---
 
-## 最近一次学习（日期：2026-03-13）
+## 最近一次学习（日期：2026-03-17）
 
 ### 已完成内容
 
@@ -54,6 +54,8 @@
 
 - **阶段 3（Web API）**
   - ✅ **FastAPI**：`src/api.py`，GET /health，POST /tasks（TaskCreate + field_validator、try/except + logger），与命令行共用 TASK_LIST、save_tasks；uvicorn 启动。
+  - ✅ **前后端接口联调**：前端通过请求体（axios `data` / JSON body）传 `description`；后端统一返回结构 `{code, data, msg}`。
+  - ✅ **统一错误返回**：增加全局异常处理，将参数校验失败等错误也统一为 `{code, data, msg}` 风格返回（学习阶段 A-1）。
 
 - **任务列表与删除（阶段 1/3 扩展）**
   - ✅ **TASK_LIST 结构**：改为存字典 `{"task_id": int, "task_name": str}`，自增 task_id，add 时判重（`any(t["task_name"] == ...)`）。
@@ -96,7 +98,7 @@
    - 对应清单 §4 进阶、§9 logging。
 
 3. **或继续完善 API 与前端**
-   - 后端补 GET /tasks、按 id 的 GET/PUT/DELETE，与前端联调。
+   - 后端已完成 GET /tasks、POST /tasks、DELETE /tasks/{task_id} 的统一返回格式；可继续补按 id 的 GET/PUT，前端完善列表刷新、错误提示展示。
 
 4. **查阅**
    - 完整阶段说明与清单章节对照：`.cursor/rules/python-study-plan.mdc`

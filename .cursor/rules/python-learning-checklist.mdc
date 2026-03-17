@@ -19,7 +19,7 @@ alwaysApply: true
 | **列表 list** | | |
 | 创建、索引 list[i]、切片 list[a:b]、len(list) | [已学] | TASKS、echo 的 parts |
 | list.append(x) / list.extend(iterable) | [已学] | 计划用于 add 任务 |
-| list.insert(i, x) / list.remove(x) / list.pop([i]) | [未学] | |
+| list.insert(i, x) / list.remove(x) / list.pop([i]) | [已学] | 删除任务：pop / 列表推导式过滤；添加任务：append |
 | list.index(x) / list.count(x) | [未学] | |
 | 遍历 for x in list、for i, x in enumerate(list) | [已学] | handle_help 等 |
 | **字典 dict** | | |
@@ -137,7 +137,7 @@ alwaysApply: true
 
 | 知识点 | 状态 | 备注 |
 |--------|------|------|
-| try / except 基本语法 | [未学] | 可放在 input/解析 处讲 |
+| try / except 基本语法 | [已学] | commands/api 中的 try/except；并补充 FastAPI 异常处理器 |
 | 捕获特定异常类型 | [未学] | |
 | else / finally 子句 | [未学] | |
 | raise 抛出异常 | [未学] | |
