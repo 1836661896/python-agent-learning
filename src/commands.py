@@ -3,6 +3,9 @@ import json
 import logging
 logger = logging.getLogger(__name__)
 
+from dataclasses import dataclass
+from typing import Callable, Any
+
 
 # 帮助展示的信息
 HELP_MESSAGE = {
@@ -30,11 +33,15 @@ SYSTEM_MESSAGE = {
 def adjust_command(command: str) -> str:
     error_list = {
         "echo": "未输入回显内容",
-        "add": "未输入任务内容"
+        "add": "未输入任务内容",
+        "delete": "未输入任务id"
     }
     command_list = command.split(" ")
     if len(command_list) == 1:
-        print(error_list[command_list[0]])
+        try:
+            print(error_list[command_list[0]])
+        except ValueError:
+            None
         return ""
     else:
         command_content = " ".join(command_list[1:])
@@ -160,21 +167,161 @@ def handle_command(command: str) -> bool:
     if command == "quit":
         handle_quit("quit")
         return False
-    elif command.startswith("echo"):
-        handle_echo(command)
-        return True
-    elif command.startswith("add"):
-        add_task(command)
-        return True
-    elif command.startswith("delete"):
-        delete_task(command)
-        return True
+    # elif command.startswith("echo"):
+    #     handle_echo(command)
+    #     return True
+    # elif command.startswith("add"):
+    #     add_task(command)
+    #     return True
+    # elif command.startswith("delete"):
+    #     delete_task(command)
+    #     return True
     elif command.startswith("/"):
         handle_invalid("invalid_command")
         return True
-    elif command in COMMAND_HANDLERS:
-        COMMAND_HANDLERS[command](command)
-        return True
+
     else:
-        handle_message(command)
+        ok_flag, msg, data = run_tool(command)
+        if ok_flag:
+            if data:
+                if isinstance(data, list):
+                    for t in data:
+                        if isinstance(t, dict):
+                            for key, item in t.items():
+                                print(f"{key} - {item}")
+                        else:
+                            print(t)
+                elif isinstance(data, dict):
+                    for key, item in data.items():
+                        print(f"{key} - {item}")
+                else:
+                    print(data)
+        else:
+            print(msg)
         return True
+    # elif command in COMMAND_HANDLERS:
+    #     COMMAND_HANDLERS[command](command)
+    #     return True
+    # else:
+    #     handle_message(command)
+    #     return True
+    
+
+"""------------------------------------------------------------------------"""
+
+@dataclass
+class Tool:
+    name: str
+    match: Callable[[str], bool]
+    run: Callable[[str], tuple[bool, str, Any]]
+
+class Agent:
+    def __init__(self, tools: list[Tool]):
+        self.tools = tools
+
+    def run_text(self, text: str):
+        text = text.strip()
+        if not text:
+            return False, "请输入命令", None
+        
+        for tool in self.tools:
+            if tool.match(text):
+                return tool.run(text)
+        
+        return False, "未知命令", None
+
+
+
+def match_list(cmd: str) -> bool:
+    return cmd == "list"
+
+def match_add(cmd: str) -> bool:
+    return cmd.startswith("add")
+
+def match_delete(cmd: str) -> bool:
+    return cmd.startswith("delete")
+
+def match_echo(cmd: str) -> bool:
+    return cmd.startswith("echo")
+
+def match_time(cmd: str) -> bool:
+    return cmd == "time"
+
+def match_help(cmd: str) -> bool:
+    return cmd == "help"
+
+def match_version(cmd: str) -> bool:
+    return cmd == "version"
+
+def tool_list(cmd: str):
+    return True, "ok", TASK_LIST
+
+def tool_add(cmd: str):
+    task_content = adjust_command(cmd)
+    if not task_content:
+        return False, "未输入任务内容", None
+    
+    if any(t["task_name"] == task_content for t in TASK_LIST):
+        return False, "任务已存在", None
+    
+    task_id = TASK_LIST[-1]["task_id"] + 1 if TASK_LIST else 1
+    task = {
+        "task_id": task_id,
+        "task_name": task_content
+    }
+    TASK_LIST.append(task)
+    save_tasks()
+    return True, "添加成功", task
+
+def tool_delete(cmd: str):
+    task_id_str = adjust_command(cmd)
+    if not task_id_str:
+        return False, "未输入任务id", None
+    
+    try:
+        task_id = int(task_id_str)
+    except ValueError:
+        return False, "任务id必须是数字", None
+    
+    if any(t["task_id"] == task_id for t in TASK_LIST):
+        TASK_LIST[:] = [t for t in TASK_LIST if t["task_id"] != task_id]
+        save_tasks()
+        return True, "删除任务成功", None
+    else:
+        return False, "未找到任务", None
+
+def tool_echo(cmd: str):
+    echo_content = adjust_command(cmd)
+    if not echo_content:
+        return False, "未输入回显内容", None
+    return True, "ok", echo_content
+
+def tool_time(cmd: str):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return True, "ok", now
+
+def tool_help(cmd: str):
+    return True, "ok", HELP_MESSAGE
+
+def tool_version(cmd: str):
+    return True, "ok", SYSTEM_MESSAGE["version"]
+
+
+
+def run_tool(command: str):
+    """
+    给API/命令行的统一入口：
+    返回（ok:bool, msg: str, data）
+    """
+    agent = Agent(
+        tools=[
+            Tool("list", match_list, tool_list),
+            Tool("add", match_add, tool_add),
+            Tool("delete", match_delete, tool_delete),
+            Tool("echo", match_echo, tool_echo),
+            Tool("time", match_time, tool_time),
+            Tool("help", match_help, tool_help),
+            Tool("version", match_version, tool_version),
+        ]
+    )
+    return agent.run_text(command)

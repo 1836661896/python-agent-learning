@@ -33,7 +33,7 @@
 
 ---
 
-## 最近一次学习（日期：2026-03-17）
+## 最近一次学习（日期：2026-03-18）
 
 ### 已完成内容
 
@@ -56,6 +56,13 @@
   - ✅ **FastAPI**：`src/api.py`，GET /health，POST /tasks（TaskCreate + field_validator、try/except + logger），与命令行共用 TASK_LIST、save_tasks；uvicorn 启动。
   - ✅ **前后端接口联调**：前端通过请求体（axios `data` / JSON body）传 `description`；后端统一返回结构 `{code, data, msg}`。
   - ✅ **统一错误返回**：增加全局异常处理，将参数校验失败等错误也统一为 `{code, data, msg}` 风格返回（学习阶段 A-1）。
+  - ✅ **校验失败提示优化**：参数校验失败时 `msg` 返回更具体的中文原因（如“任务描述不能为空”），并支持多个错误用 `；` 拼接。
+
+- **阶段 4（Agent 工具系统，最小版本）**
+  - ✅ 新增 **`POST /agent/run`**：前端传 `{"text": "add xxx"}`，后端调用统一入口并返回 `{code, data, msg}`。
+  - ✅ `src/commands.py` 新增统一入口 **`run_tool(command)`**，让 API 与命令行可逐步复用同一套业务逻辑。
+  - ✅ 将 `run_tool` 重构为「工具注册表」：`match_*` + `tool_*` + `tools` 列表循环匹配执行，便于后续扩展。
+  - ✅ 已接入工具：`list / add / delete / echo / time / help / version`（未知命令返回 `code=1, msg="未知命令"`）。
 
 - **任务列表与删除（阶段 1/3 扩展）**
   - ✅ **TASK_LIST 结构**：改为存字典 `{"task_id": int, "task_name": str}`，自增 task_id，add 时判重（`any(t["task_name"] == ...)`）。
@@ -95,6 +102,8 @@
 
 2. **阶段 4：Agent 工具系统**
    - 定义 Task/Step 数据结构（类或 dataclass），将 list、add、delete、time、echo 等命令封装为「工具」，统一命令解析与日志。
+   - 建议从最小版本开始：先做一个 `Tool`（name/description/run），再做一个 `Agent`（接收用户输入→选择工具→执行→返回统一结构）。
+   - **下一步一句话（给明天的自己）**：把 `commands.py` 里 `run_tool()` 目前“每次调用都会新建 Agent(tools=...)”改成“模块级只创建一次 `AGENT = Agent([...])`”，然后 `run_tool(command)` 只负责 `return AGENT.run_text(command)`；这样避免重复初始化，也更符合后续加入日志/上下文（记忆）的 Agent 架构。
    - 对应清单 §4 进阶、§9 logging。
 
 3. **或继续完善 API 与前端**

@@ -4,14 +4,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 try:
-    from src.schemas import TaskCreate
+    from src.schemas import TaskCreate, AgentRunRequest
 except ModuleNotFoundError:
-    from schemas import TaskCreate
+    from schemas import TaskCreate, AgentRunRequest
 
 try:
-    from src.commands import save_tasks, TASK_LIST
+    from src.commands import TASK_LIST, save_tasks, run_tool
 except ModuleNotFoundError:
-    from commands import save_tasks, TASK_LIST
+    from commands import TASK_LIST, save_tasks, run_tool
 
 import logging
 
@@ -43,10 +43,34 @@ def fail(msg: str, data=None):
 
 @app.exception_handler(RequestValidationError)
 def validation_exception_handler(request, exc: RequestValidationError):
+    # exc.errors() 是一个列表，里面每一项是一个字段错误信息（dict）
+    errors = exc.errors()
+
+    # 先去第一个错误的msg
+    # msg = "参数校验失败"
+    # if errors:
+    #     first = errors[0]
+    #     if isinstance(first, dict) and isinstance(first.get("msg"), str):
+    #         msg = first["msg"]
+    #         if ", " in msg:
+    #             msg = msg.split(", ", 1)[-1]
+
+    msgs = []
+    for err in errors:
+        if isinstance(err, dict) and isinstance(err.get("msg"), str):
+            m = err["msg"]
+            if ", " in m:
+                m = m.split(", ", 1)[-1]
+            msgs.append(m)
+        
+        msg = "；".join(msgs) if msgs else "参数校验失败"
+    
     return JSONResponse(
         status_code=200,
-        content=fail("参数校验失败")
+        content=fail(msg)
     )
+
+
 
 @app.exception_handler(HTTPException)
 def http_exception_handler(request, exc: HTTPException):
@@ -105,3 +129,10 @@ def delete_task(task_id: int):
     else:
         return fail("没有找到任务")
     
+@app.post("/agent/run")
+def use_tool(body: AgentRunRequest):
+    text = body.text
+    ok_flag, msg, data = run_tool(text)
+    if ok_flag: 
+        return ok(msg, data) 
+    return fail(msg)
