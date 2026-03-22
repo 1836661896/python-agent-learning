@@ -1,13 +1,31 @@
-from datetime import datetime
+"""命令行与 Agent 工具模块。
+
+职责概览：
+    - 维护内存中的任务列表 ``TASK_LIST``，并与 ``tasks.json`` 同步；
+    - 通过 ``Agent`` + ``Tool`` 将用户输入路由到具体工具（list/add/delete 等）；
+    - ``run_tool`` 供 API 与命令行共用；``handle_command`` 仅负责命令行交互（quit、非法前缀、打印）。
+
+约定：
+    - 工具统一返回 ``(ok: bool, msg: str, data: Any)``；
+    - ``ok`` 为 False 时，命令行打印 ``msg``；为 True 时按 ``data`` 类型决定如何展示（见 ``_print_tool_result``）。
+"""
+
+from __future__ import annotations
+
 import json
 import logging
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any, Callable, Optional
+from collections import deque
+
 logger = logging.getLogger(__name__)
 
-from dataclasses import dataclass
-from typing import Callable, Any
+# ---------------------------------------------------------------------------
+# 常量与任务数据
+# ---------------------------------------------------------------------------
 
-
-# 帮助展示的信息
+# 各命令的「说明文案」，供 help 工具返回并在命令行展示
 HELP_MESSAGE = {
     "help": "展示当前可输入的指令",
     "version": "展示当前版本信息",
@@ -17,47 +35,28 @@ HELP_MESSAGE = {
     "add": "添加任务到任务列表",
     "delete": "删除任务列表中的任务",
     "time": "展示当前时间",
-    "其他": "直接展示出来"
+    "其他": "直接展示出来",
 }
 
-# 系统目前支持的命令
+# 程序固定话术：欢迎语、提示、版本号、错误提示等（键与代码里 show_message 传入的键一致）
 SYSTEM_MESSAGE = {
     "welcome": "欢迎来到 Python Agent 学习项目！",
     "hint": "输入命令，输入 quit 退出。",
     "quit": "再见！",
     "version": "1.0.0",
-    "invalid_command": "未知命令格式，请直接输入文本或输入 help 查看帮助"
+    "invalid_command": "未知命令格式，请直接输入文本或输入 help 查看帮助",
 }
 
-# 统一处理系统消息，去除前方的指示词
-def adjust_command(command: str) -> str:
-    error_list = {
-        "echo": "未输入回显内容",
-        "add": "未输入任务内容",
-        "delete": "未输入任务id"
-    }
-    command_list = command.split(" ")
-    if len(command_list) == 1:
-        try:
-            print(error_list[command_list[0]])
-        except ValueError:
-            None
-        return ""
-    else:
-        command_content = " ".join(command_list[1:])
-        return command_content
-
 TASK_FILE = "tasks.json"
+# 类型注解：给 IDE / mypy 等静态检查用，类似 TS 的变量类型；运行时仍是普通 list，不会自动校验元素形状
+TASK_LIST: list[dict[str, Any]] = []
 
-# 任务列表
-TASK_LIST = []
-
+# 启动时尝试从磁盘恢复任务；文件不存在或 JSON 损坏时保持空列表，不中断启动
 try:
     with open(TASK_FILE, "r", encoding="utf-8") as f:
         data = f.read()
         if data.strip():
             TASK_LIST = json.loads(data)
-
 except FileNotFoundError:
     pass
 except json.JSONDecodeError:
@@ -65,263 +64,349 @@ except json.JSONDecodeError:
 
 logger.info("已加载任务列表，共 %s 条", len(TASK_LIST))
 
-# 展示任务列表
-def handle_task(command: str) -> None:
-    if len(TASK_LIST) == 0:
-        print("暂无任务")
-    else:
-        for item in TASK_LIST:
-            print(f"{item['task_id']}. {item['task_name']}")
+
+def adjust_command(command: str) -> str:
+    """从整条命令里取出「第一个词之后」的文本。
+
+    示例：
+        ``"add 买牛奶"`` → ``"买牛奶"``；``"echo"`` 单独一词 → ``""``。
+
+    用于 ``add`` / ``delete`` / ``echo`` 等「动词 + 参数」形式，参数里可以含空格
+    （用 ``split`` 只拆第一个空格会丢信息，因此先 ``split(" ")`` 再 ``join`` 后半段）。
+
+    Returns:
+        第一个词之后的字符串；若整行只有一个词则返回空字符串。
+    """
+    parts = command.split(" ")
+    # 先处理「只有一词」并 return，剩余逻辑写在 if 外，少一层 else（guard clause 常见写法）
+    if len(parts) == 1:
+        return ""
+    return " ".join(parts[1:])
 
 
 def save_tasks() -> None:
+    """把 ``TASK_LIST`` 序列化为 JSON 写入 ``TASK_FILE``。
+
+    在添加/删除任务成功后调用，保证磁盘与内存一致。
+    ``ensure_ascii=False`` 便于中文可读；``indent=2`` 便于人工查看 diff。
+    """
     with open(TASK_FILE, "w", encoding="utf-8") as f:
         f.write(json.dumps(TASK_LIST, ensure_ascii=False, indent=2))
+    logger.info("已保存任务列表，共 %s 条", len(TASK_LIST))
 
-        logger.info("已保存任务列表，共 %s 条", len(TASK_LIST))
 
+# ---------------------------------------------------------------------------
+# Agent：Tool / Step / 匹配器 / 工具实现
+# ---------------------------------------------------------------------------
 
-# 添加任务
-def add_task(command: str) -> None:
-    task_content = adjust_command(command)
-    if task_content:
-        if any(t["task_name"] == task_content for t in TASK_LIST):
-            print("任务已添加，请不要重复添加")
-        else:
-            if len(TASK_LIST):
-                task_id = TASK_LIST[-1]["task_id"] + 1
-            else:
-                task_id = 1
-            TASK_LIST.append({
-                "task_id": task_id,
-                "task_name": task_content
-            })
-            save_tasks()
-            logger.info("添加任务： %s", task_content)
-            print("任务添加成功")
-
-def delete_task(command: str) -> None:
-    task_id_str = adjust_command(command)
-    if task_id_str:
-        try:
-            task_id = int(task_id_str)
-            if any(t["task_id"] == task_id for t in TASK_LIST):
-                task_name = next((t["task_name"] for t in TASK_LIST if t["task_id"] == task_id), None)
-                TASK_LIST[:] = [t for t in TASK_LIST if t["task_id"] != task_id]
-                save_tasks()
-                logger.info("删除任务：任务id %s，任务名称： %s", task_id, task_name )
-                print("删除任务成功")
-            else:
-                print("没有找到任务")
-        except ValueError:
-            print("数据格式异常")
-
-# 展示系统消息
-def show_message(command: str) -> None:
-    print(SYSTEM_MESSAGE[command])
-
-# 展示目前系统消息对应的功能
-def handle_help(command: str) -> None:
-    for name, desc in HELP_MESSAGE.items():
-        print(f" - {name}：{desc}")
-
-# 展示版本
-def handle_version(command: str) -> None:
-    show_message(command)
-
-# 报错信息
-def handle_invalid(command: str) -> None:
-    show_message(command)
-
-# 展示用户输入的信息
-def handle_message(command: str) -> None:
-    print(f"输入的内容为：{command}")
-
-# 展示当前时间
-def handle_time(command: str) -> None:
-    now = datetime.now()
-    print(now.strftime("%Y-%m-%d %H:%M:%S"))
-
-# 退出
-def handle_quit(command: str) -> None:
-    show_message(command)
-
-# 回显用户输入的信息
-def handle_echo(command: str) -> None:
-    echo_message = adjust_command(command)
-    if echo_message:
-        print(echo_message)
-
-# 快捷调用方法
-COMMAND_HANDLERS = {
-    "help": handle_help,
-    "version": handle_version,
-    "echo": handle_echo,
-    "list": handle_task,
-    "time": handle_time
-}
-
-# 处理输入的消息
-def handle_command(command: str) -> bool:
-    """处理一条用户输入，返回是否继续循环"""
-    if command == "quit":
-        handle_quit("quit")
-        return False
-    # elif command.startswith("echo"):
-    #     handle_echo(command)
-    #     return True
-    # elif command.startswith("add"):
-    #     add_task(command)
-    #     return True
-    # elif command.startswith("delete"):
-    #     delete_task(command)
-    #     return True
-    elif command.startswith("/"):
-        handle_invalid("invalid_command")
-        return True
-
-    else:
-        ok_flag, msg, data = run_tool(command)
-        if ok_flag:
-            if data:
-                if isinstance(data, list):
-                    for t in data:
-                        if isinstance(t, dict):
-                            for key, item in t.items():
-                                print(f"{key} - {item}")
-                        else:
-                            print(t)
-                elif isinstance(data, dict):
-                    for key, item in data.items():
-                        print(f"{key} - {item}")
-                else:
-                    print(data)
-        else:
-            print(msg)
-        return True
-    # elif command in COMMAND_HANDLERS:
-    #     COMMAND_HANDLERS[command](command)
-    #     return True
-    # else:
-    #     handle_message(command)
-    #     return True
-    
-
-"""------------------------------------------------------------------------"""
 
 @dataclass
 class Tool:
+    """描述一个可调用工具（命令行与 API 共用的一套逻辑）。
+
+    Attributes:
+        name: 工具标识，用于日志与 Step 记录。
+        match: 判断当前用户输入是否应由本工具处理；多个工具时**按 TOOLS 列表顺序**第一个命中的执行。
+        run: 执行工具；返回三元组 ``(是否成功, 说明信息, 附加数据)``，供 API JSON 或命令行打印。
+    """
+
     name: str
     match: Callable[[str], bool]
     run: Callable[[str], tuple[bool, str, Any]]
 
-class Agent:
-    def __init__(self, tools: list[Tool]):
-        self.tools = tools
 
-    def run_text(self, text: str):
+@dataclass
+class Step:
+    """单次工具调用的快照，用于 ``logger.info`` 排查问题。
+
+    Attributes:
+        tool_name: 命中的工具名；未命中任意工具时为 ``"unknown"``。
+        input_text: 用户原始输入（已 ``strip`` 后传入 Agent 的文本）。
+        ok_flag: 工具返回的成功标志。
+        msg: 工具返回的说明字符串。
+        timestamp: 命中并执行完毕时的时间戳字符串。
+    """
+
+    tool_name: str
+    input_text: str
+    ok_flag: bool
+    msg: str
+    timestamp: str
+
+
+def format_step(step: Step) -> str:
+    """把 Step 格式化成一行人类可读的日志文本。
+
+    使用两个相邻的 f-string，Python 会在编译时自动拼接为**一个**字符串，
+    中间无换行；源码里换行只是为了不超过行宽、方便阅读。
+    """
+    return (
+        f"调用{step.tool_name} 执行{step.input_text}，执行结果：{step.ok_flag}，"
+        f"返回信息：{step.msg}；执行时间：{step.timestamp}"
+    )
+
+def _record_step(self, step: Step) -> None:
+    self.last_step = step
+    self.step_history.append(step)
+
+
+class Agent:
+    """在用户输入上依次尝试各工具的 ``match``，命中则 ``run`` 并返回三元组。"""
+
+    def __init__(self, tools: list[Tool]) -> None:
+        self.tools = tools
+        self.last_step: Step | None = None
+        self.step_history: list[Step] = []
+
+    def run_text(self, text: str) -> tuple[bool, str, Any]:
+        """对一行输入执行工具路由。
+
+        流程：
+            1. 空串 → 失败，提示「请输入命令」；
+            2. 按 ``self.tools`` 顺序遍历，``match`` 为真则 ``run`` 并返回；
+            3. 全部未命中 → 失败，「未知命令」，并记录 ``last_step`` 为 unknown。
+
+        Returns:
+            ``(ok, msg, data)``，与各 ``tool_*`` 返回值含义一致。
+        """
         text = text.strip()
         if not text:
+            logger.info("未输入命令")
             return False, "请输入命令", None
-        
+
         for tool in self.tools:
+            # 先构造 Step 骨架；只有 match 成功才填时间戳并写入 last_step
+            step = Step(
+                tool_name=tool.name,
+                input_text=text,
+                ok_flag=False,
+                msg="",
+                timestamp="",
+            )
             if tool.match(text):
-                return tool.run(text)
-        
+                ok_flag, msg, data = tool.run(text)
+                step.ok_flag = ok_flag
+                step.msg = msg
+                step.timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                _record_step(self, step)
+                logger.info(format_step(step))
+                return ok_flag, msg, data
+
+        # 没有任何工具匹配：不要误以为「成功无数据」
+        _record_step(self, Step(
+            tool_name="unknown",
+            input_text=text,
+            ok_flag=False,
+            msg="未知命令",
+            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        ))
+        logger.info("未知命令： %s", text)
         return False, "未知命令", None
 
 
+# --- match_*：仅负责「这条输入是否归我管」，逻辑要简单，避免副作用 ---
+
 
 def match_list(cmd: str) -> bool:
+    """整行等于 ``list`` 时才是列表命令（避免误伤其它以 list 开头的词）。"""
     return cmd == "list"
 
+
 def match_add(cmd: str) -> bool:
+    """以 ``add`` 开头，后接空格与任务内容。"""
     return cmd.startswith("add")
 
+
 def match_delete(cmd: str) -> bool:
+    """以 ``delete`` 开头，后接任务 id。"""
     return cmd.startswith("delete")
 
+
 def match_echo(cmd: str) -> bool:
+    """以 ``echo`` 开头，后接要回显的文本。"""
     return cmd.startswith("echo")
 
+
 def match_time(cmd: str) -> bool:
+    """整行等于 ``time``。"""
     return cmd == "time"
 
+
 def match_help(cmd: str) -> bool:
+    """整行等于 ``help``。"""
     return cmd == "help"
 
+
 def match_version(cmd: str) -> bool:
+    """整行等于 ``version``。"""
     return cmd == "version"
 
-def tool_list(cmd: str):
+
+# --- tool_*：真正读写 TASK_LIST 或返回展示数据；与 API 共用，因此用返回值而非 print ---
+
+
+def tool_list(cmd: str) -> tuple[bool, str, Any]:
+    """返回当前任务列表引用（成功时 data 为 ``TASK_LIST``）。"""
     return True, "ok", TASK_LIST
 
-def tool_add(cmd: str):
+
+def tool_add(cmd: str) -> tuple[bool, str, Any]:
+    """解析 ``add …``，追加任务并 ``save_tasks``。
+
+    任务 id：在现有最大 ``task_id`` 上加 1；列表为空则从 1 开始。
+    同名任务拒绝重复添加。
+    """
     task_content = adjust_command(cmd)
     if not task_content:
         return False, "未输入任务内容", None
-    
+
     if any(t["task_name"] == task_content for t in TASK_LIST):
         return False, "任务已存在", None
-    
+
     task_id = TASK_LIST[-1]["task_id"] + 1 if TASK_LIST else 1
-    task = {
-        "task_id": task_id,
-        "task_name": task_content
-    }
+    task = {"task_id": task_id, "task_name": task_content}
     TASK_LIST.append(task)
     save_tasks()
     return True, "添加成功", task
 
-def tool_delete(cmd: str):
+
+def tool_delete(cmd: str) -> tuple[bool, str, Any]:
+    """解析 ``delete <id>``，按 ``task_id`` 删除并持久化。"""
     task_id_str = adjust_command(cmd)
     if not task_id_str:
         return False, "未输入任务id", None
-    
+
     try:
         task_id = int(task_id_str)
     except ValueError:
         return False, "任务id必须是数字", None
-    
+
     if any(t["task_id"] == task_id for t in TASK_LIST):
+        # TASK_LIST[:] = … 原地替换元素，变量名仍指向同一 list 对象，import 本模块的其它代码看到的仍是「同一个列表」
         TASK_LIST[:] = [t for t in TASK_LIST if t["task_id"] != task_id]
         save_tasks()
         return True, "删除任务成功", None
-    else:
-        return False, "未找到任务", None
+    return False, "未找到任务", None
 
-def tool_echo(cmd: str):
+
+def tool_echo(cmd: str) -> tuple[bool, str, Any]:
+    """回显 ``echo`` 后面的内容；data 为要显示的字符串。"""
     echo_content = adjust_command(cmd)
     if not echo_content:
         return False, "未输入回显内容", None
     return True, "ok", echo_content
 
-def tool_time(cmd: str):
+
+def tool_time(cmd: str) -> tuple[bool, str, Any]:
+    """返回当前时间的格式化字符串。"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return True, "ok", now
 
-def tool_help(cmd: str):
+
+def tool_help(cmd: str) -> tuple[bool, str, Any]:
+    """返回 ``HELP_MESSAGE`` 字典，由命令行按 dict 分支打印键值。"""
     return True, "ok", HELP_MESSAGE
 
-def tool_version(cmd: str):
+
+def tool_version(cmd: str) -> tuple[bool, str, Any]:
+    """返回版本号字符串（来自 ``SYSTEM_MESSAGE``）。"""
     return True, "ok", SYSTEM_MESSAGE["version"]
 
 
+# 列表顺序即匹配优先级：排在前面的 Tool 会先被尝试；若两条规则可能同时命中，顺序决定结果
+TOOLS: list[Tool] = [
+    Tool("list", match_list, tool_list),
+    Tool("add", match_add, tool_add),
+    Tool("delete", match_delete, tool_delete),
+    Tool("echo", match_echo, tool_echo),
+    Tool("time", match_time, tool_time),
+    Tool("help", match_help, tool_help),
+    Tool("version", match_version, tool_version),
+]
 
-def run_tool(command: str):
+AGENT = Agent(tools=TOOLS)
+
+
+def run_tool(command: str) -> tuple[bool, str, Any]:
+    """API 与命令行共用的统一入口。
+
+    内部委托给全局 ``AGENT.run_text``，保证路由规则只有一份。
+
+    Returns:
+        ``(ok, msg, data)``：失败时 ``ok`` 为 False，``msg`` 为错误说明；成功时 ``data`` 依工具而异
+        （list 为列表、help 为 dict、echo 为字符串等）。
     """
-    给API/命令行的统一入口：
-    返回（ok:bool, msg: str, data）
+    return AGENT.run_text(command)
+
+
+# ---------------------------------------------------------------------------
+# 命令行：系统消息与主循环
+# ---------------------------------------------------------------------------
+
+
+def show_message(key: str) -> None:
+    """根据键从 ``SYSTEM_MESSAGE`` 取一句话并打印（欢迎、提示、再见等）。"""
+    print(SYSTEM_MESSAGE[key])
+
+
+def handle_quit(command: str) -> None:
+    """打印告别语；``command`` 一般为 ``"quit"`` 以对应 ``SYSTEM_MESSAGE`` 键。"""
+    show_message(command)
+
+
+def handle_invalid(command: str) -> None:
+    """打印非法输入提示；``command`` 一般为 ``"invalid_command"``。"""
+    show_message(command)
+
+
+def _print_tool_result(ok_flag: bool, msg: str, data: Any) -> None:
+    """把 ``run_tool`` 的三元组转成命令行可见输出（API 不走此函数，自行组 JSON）。
+
+    规则：
+        - ``ok_flag`` 为 False：只打印 ``msg``；
+        - 成功且 ``data`` 为 None：不额外打印（例如某些仅状态成功的场景）；
+        - ``data`` 为 list：元素若是带 ``task_id`` / ``task_name`` 的字典则按行号打印任务，其它 dict 按键值打印；
+        - ``data`` 为 dict：每行 ``键 - 值``（用于 help）；
+        - 其它类型：``print(data)``。
     """
-    agent = Agent(
-        tools=[
-            Tool("list", match_list, tool_list),
-            Tool("add", match_add, tool_add),
-            Tool("delete", match_delete, tool_delete),
-            Tool("echo", match_echo, tool_echo),
-            Tool("time", match_time, tool_time),
-            Tool("help", match_help, tool_help),
-            Tool("version", match_version, tool_version),
-        ]
-    )
-    return agent.run_text(command)
+    if not ok_flag:
+        print(msg)
+        return
+    if data is None:
+        return
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and "task_id" in item and "task_name" in item:
+                print(f"{item['task_id']}. {item['task_name']}")
+            elif isinstance(item, dict):
+                for key, val in item.items():
+                    print(f"{key} - {val}")
+            else:
+                print(item)
+    elif isinstance(data, dict):
+        for key, val in data.items():
+            print(f"{key} - {val}")
+    else:
+        print(data)
+
+
+def handle_command(command: str) -> bool:
+    """处理一条用户输入（命令行专用）。
+
+    - ``quit``：打印再见语并返回 False，外层主循环应退出；
+    - 以 ``/`` 开头：视为非法格式，提示后返回 True 继续循环；
+    - 其它：交给 ``run_tool``，再用 ``_print_tool_result`` 打印。
+
+    Returns:
+        True 表示继续主循环；False 表示应退出。
+    """
+    if command == "quit":
+        handle_quit("quit")
+        return False
+    if command.startswith("/"):
+        handle_invalid("invalid_command")
+        return True
+
+    ok_flag, msg, data = run_tool(command)
+    _print_tool_result(ok_flag, msg, data)
+    return True

@@ -1,7 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from dataclasses import asdict
 
 try:
     from src.schemas import TaskCreate, AgentRunRequest
@@ -9,9 +10,9 @@ except ModuleNotFoundError:
     from schemas import TaskCreate, AgentRunRequest
 
 try:
-    from src.commands import TASK_LIST, save_tasks, run_tool
+    from src.commands import TASK_LIST, AGENT, save_tasks, run_tool
 except ModuleNotFoundError:
-    from commands import TASK_LIST, save_tasks, run_tool
+    from commands import TASK_LIST, AGENT,  save_tasks, run_tool
 
 import logging
 
@@ -129,6 +130,7 @@ def delete_task(task_id: int):
     else:
         return fail("没有找到任务")
     
+# 调用命令集
 @app.post("/agent/run")
 def use_tool(body: AgentRunRequest):
     text = body.text
@@ -136,3 +138,19 @@ def use_tool(body: AgentRunRequest):
     if ok_flag: 
         return ok(msg, data) 
     return fail(msg)
+
+# 获取最后一步操作内容
+@app.get("/agent/last-step")
+def get_last_step():
+    if AGENT.last_step is None:
+        return fail("暂无执行记录")
+    return ok("查询成功", AGENT.last_step)
+
+# 获取操作历史记录
+@app.get("/agent/steps")
+def get_steps(limit: int = Query(20, ge=1, le=100)):
+    raw = list(AGENT.step_history)
+    if not raw:
+        return ok("查询成功", [])
+    recent = list(reversed(raw))[:limit]
+    return ok("查询成功", [asdict(s) for s in recent])

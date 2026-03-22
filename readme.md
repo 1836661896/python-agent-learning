@@ -12,9 +12,11 @@
 ## 基本项目信息
 
 - **项目名称**：Python Agent 学习项目（后端部分）
-- **当前阶段**：阶段 3（Web API）已完成 — 下一步做阶段 4（Agent 工具系统）或启动前端
+- **当前阶段**：阶段 4（Agent 工具系统）持续推进；**React 前端已与后端联调**（health、tasks、agent/run、agent/last-step、**agent/steps**）。
   - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks，与命令行共用 TASK_LIST）
-  - 🔄 下一步：阶段 4（Task/Step 结构、工具封装）或启动 React 前端联调
+  - ✅ 前端 **阶段 2（组件拆分）** 已完成（`HealthHeader`、`AgentCommand`、`LastStep`、`StepList`、`TaskSection` 等，见 `frontend/readme.md`）。
+  - 🔄 **前端下一步**：**阶段 3**（请求层与错误体验：`http` 错误分类、React Query 错误态等，见 `frontend/.cursor/rules/frontend-study-plan.mdc`）。
+  - 🔄 **后端下一步（可选）**：`step_history` 用 **`deque(maxlen=N)`** 限内存；或进入 **阶段 6（数据库 + ORM + 迁移）**（见下方「下一次学习的起点」）。
 - **主要目标**：
   - 搭建命令行 Agent 雏形（支持基础命令）✅
   - Web API（FastAPI）与命令行共用逻辑 ✅
@@ -33,9 +35,14 @@
 
 ---
 
-## 最近一次学习（日期：2026-03-18）
+## 最近一次学习（日期：2026-03-17）
 
-### 已完成内容
+### 本次提交补充记录
+
+- **前端**：阶段 2 **组件拆分**完成；`App.tsx` 仅组合子组件；`AgentCommand` 在 `runAgent` 成功后 **`invalidateQueries`** `lastStep` / `stepList`；`StepList` 列表 **`key`** 使用 `index` + `timestamp` 防冲突。详见 **`frontend/readme.md`**。
+- **后端**：此前已具备 **`GET /agent/steps?limit=`**、**`Step` 历史** 与前端操作历史联调；本次进度文档与规则对齐，无强制后端代码变更。
+
+### 已完成内容（历史汇总，便于换设备接续）
 
 - **环境与命令行（阶段 0）**
   - ✅ 虚拟环境 `.venv`、`src/main.py`、命令行循环、help/version/echo/quit。
@@ -63,6 +70,9 @@
   - ✅ `src/commands.py` 新增统一入口 **`run_tool(command)`**，让 API 与命令行可逐步复用同一套业务逻辑。
   - ✅ 将 `run_tool` 重构为「工具注册表」：`match_*` + `tool_*` + `tools` 列表循环匹配执行，便于后续扩展。
   - ✅ 已接入工具：`list / add / delete / echo / time / help / version`（未知命令返回 `code=1, msg="未知命令"`）。
+  - ✅ **`Step` 与 `AGENT.last_step`**：每次 `run_tool` 执行后记录最近一次步骤（含工具名、输入、成败、时间）；未知命令也会写入 `last_step`。
+  - ✅ **`GET /agent/last-step`**：返回最近一次 `Step` 的 JSON（与前端 `getLastStep` 联调）。
+  - ✅ **前后端全链路**：`myproject/frontend` 已接入 health、tasks、**Agent 命令**、**最后一步**、**操作历史（`/agent/steps`）**（以 `frontend/readme.md` 为准）。
 
 - **任务列表与删除（阶段 1/3 扩展）**
   - ✅ **TASK_LIST 结构**：改为存字典 `{"task_id": int, "task_name": str}`，自增 task_id，add 时判重（`any(t["task_name"] == ...)`）。
@@ -86,8 +96,9 @@
 | 2a | 阶段 2a：文件与 IO | 中 | ✅ 任务持久化 tasks.json、with、json |
 | 2b | 阶段 2b：工程化 | 中 | ✅ requirements.txt、logging |
 | 3 | 阶段 3：Web API | 较难 | ✅ FastAPI /health、POST /tasks |
-| 4 | 阶段 4：Agent 工具系统 | 较难 | Task/Step 结构、工具封装 ← **当前建议** |
+| 4 | 阶段 4：Agent 工具系统 | 较难 | Task/Step 结构、工具封装 ← **进行中** |
 | 5 | 阶段 5：自动化与视觉 | 难 | 截屏、键鼠、图像识别（预研） |
+| 6～11 | 阶段 6～11：真实项目扩展 | 较难 | **数据库+ORM+迁移**、**Docker/CI**、**pytest**、**鉴权**、**Redis/异步任务**、**可观测性与 API 规范**（详见 **`.cursor/rules/python-study-plan.mdc`**） |
 
 ---
 
@@ -95,23 +106,15 @@
 
 **换设备后**：`git pull` 拉取最新代码，激活虚拟环境（`source .venv/bin/activate`），然后按下面顺序来。
 
-1. **先检查并补全 delete 命令（若未完成）**
-   - 打开 `src/commands.py` 中的 `delete_task`：若仍是「生成器 + print(isIn)、删除逻辑被注释」的状态，需先补全。
-   - 推荐写法：`task_id` 需转为 int（若从 adjust_command 得到的是字符串）；用 `for i, t in enumerate(TASK_LIST): if t["task_id"] == task_id: TASK_LIST.pop(i); save_tasks(); print("已删除"); return`，循环外 `print("未找到该任务")`。或在 main 里对 delete 分支把 `adjust_command` 得到的内容转成 int 再传。
-   - 补全后再选下面 2 或 3 继续。
+1. **前端（建议优先）**：**`myproject/frontend` 阶段 3** —— 请求层与错误体验（`http.ts` 错误分类、统一提示；`useQuery` 的 **`isError`** 与重试；可选超时/Abort）。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
-2. **阶段 4：Agent 工具系统**
-   - 定义 Task/Step 数据结构（类或 dataclass），将 list、add、delete、time、echo 等命令封装为「工具」，统一命令解析与日志。
-   - 建议从最小版本开始：先做一个 `Tool`（name/description/run），再做一个 `Agent`（接收用户输入→选择工具→执行→返回统一结构）。
-   - **下一步一句话（给明天的自己）**：把 `commands.py` 里 `run_tool()` 目前“每次调用都会新建 Agent(tools=...)”改成“模块级只创建一次 `AGENT = Agent([...])`”，然后 `run_tool(command)` 只负责 `return AGENT.run_text(command)`；这样避免重复初始化，也更符合后续加入日志/上下文（记忆）的 Agent 架构。
-   - 对应清单 §4 进阶、§9 logging。
+2. **后端（阶段 4 收尾，可选）**
+   - 将步骤历史从 `list` 改为 **`collections.deque(maxlen=N)`**，避免无限增长。
+   - 或进入 **阶段 6**：PostgreSQL + SQLAlchemy/SQLModel + Alembic，任务/步骤落库（见 **`.cursor/rules/python-study-plan.mdc`** 阶段 6）。
 
-3. **或继续完善 API 与前端**
-   - 后端已完成 GET /tasks、POST /tasks、DELETE /tasks/{task_id} 的统一返回格式；可继续补按 id 的 GET/PUT，前端完善列表刷新、错误提示展示。
-
-4. **查阅**
-   - 完整阶段说明与清单章节对照：`.cursor/rules/python-study-plan.mdc`
-   - 知识点是否已学/未学：`.cursor/rules/python-learning-checklist.mdc`
+3. **查阅**
+   - 后端阶段与清单：`.cursor/rules/python-study-plan.mdc`、`python-learning-checklist.mdc`
+   - 前端进度：**`frontend/readme.md`** 与 **`frontend/.cursor/rules/`**
 
 ---
 
