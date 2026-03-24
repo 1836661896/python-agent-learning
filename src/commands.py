@@ -156,7 +156,7 @@ class Agent:
     def __init__(self, tools: list[Tool]) -> None:
         self.tools = tools
         self.last_step: Step | None = None
-        self.step_history: list[Step] = []
+        self.step_history: list[Step] = deque(maxlen=50)
 
     def run_text(self, text: str) -> tuple[bool, str, Any]:
         """对一行输入执行工具路由。

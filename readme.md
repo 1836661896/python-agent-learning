@@ -35,12 +35,14 @@
 
 ---
 
-## 最近一次学习（日期：2026-03-17）
+## 最近一次学习（日期：2026-03-24）
 
-### 本次提交补充记录
+### 本次提交补充记录（后端阶段 4 收尾）
 
-- **前端**：阶段 2 **组件拆分**完成；`App.tsx` 仅组合子组件；`AgentCommand` 在 `runAgent` 成功后 **`invalidateQueries`** `lastStep` / `stepList`；`StepList` 列表 **`key`** 使用 `index` + `timestamp` 防冲突。详见 **`frontend/readme.md`**。
-- **后端**：此前已具备 **`GET /agent/steps?limit=`**、**`Step` 历史** 与前端操作历史联调；本次进度文档与规则对齐，无强制后端代码变更。
+- **后端**：完成 **`step_history` 限长改造**：`src/commands.py` 中 `AGENT.step_history` 从 `list` 调整为 **`collections.deque(maxlen=50)`**，避免历史无限增长。
+- **后端**：完成 **`GET /agent/steps` 兼容处理**：`src/api.py` 中先 `list(AGENT.step_history)` 再进行 `reversed + limit` 截断，确保 JSON 返回稳定。
+- **后端**：已完成接口验证：`curl /agent/steps?limit=5` 返回最近 5 条，顺序与成功/失败记录均正确。
+- **前端**：今晚开始继续完善前端代码；后端数据库对接任务顺延到明天开始。
 
 ### 已完成内容（历史汇总，便于换设备接续）
 
@@ -96,7 +98,7 @@
 | 2a | 阶段 2a：文件与 IO | 中 | ✅ 任务持久化 tasks.json、with、json |
 | 2b | 阶段 2b：工程化 | 中 | ✅ requirements.txt、logging |
 | 3 | 阶段 3：Web API | 较难 | ✅ FastAPI /health、POST /tasks |
-| 4 | 阶段 4：Agent 工具系统 | 较难 | Task/Step 结构、工具封装 ← **进行中** |
+| 4 | 阶段 4：Agent 工具系统 | 较难 | Task/Step 结构、工具封装 ← **收尾完成（含 steps 历史限长）** |
 | 5 | 阶段 5：自动化与视觉 | 难 | 截屏、键鼠、图像识别（预研） |
 | 6～11 | 阶段 6～11：真实项目扩展 | 较难 | **数据库+ORM+迁移**、**Docker/CI**、**pytest**、**鉴权**、**Redis/异步任务**、**可观测性与 API 规范**（详见 **`.cursor/rules/python-study-plan.mdc`**） |
 
@@ -106,11 +108,11 @@
 
 **换设备后**：`git pull` 拉取最新代码，激活虚拟环境（`source .venv/bin/activate`），然后按下面顺序来。
 
-1. **前端（建议优先）**：**`myproject/frontend` 阶段 3** —— 请求层与错误体验（`http.ts` 错误分类、统一提示；`useQuery` 的 **`isError`** 与重试；可选超时/Abort）。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
+1. **前端（今晚优先）**：**`myproject/frontend` 阶段 3** —— 请求层与错误体验（`http.ts` 错误分类、统一提示；`useQuery` 的 **`isError`** 与重试；可选超时/Abort）。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
-2. **后端（阶段 4 收尾，可选）**
-   - 将步骤历史从 `list` 改为 **`collections.deque(maxlen=N)`**，避免无限增长。
-   - 或进入 **阶段 6**：PostgreSQL + SQLAlchemy/SQLModel + Alembic，任务/步骤落库（见 **`.cursor/rules/python-study-plan.mdc`** 阶段 6）。
+2. **后端（明天开始，阶段 6）**
+   - 已完成阶段 4 收尾：`step_history` 改为 **`deque(maxlen=50)`**，`/agent/steps` 已适配 `list(...)` 返回。
+   - 明天从 **PostgreSQL 对接** 开始：先做依赖安装与连接配置，再进入 SQLAlchemy/SQLModel + Alembic 迁移。
 
 3. **查阅**
    - 后端阶段与清单：`.cursor/rules/python-study-plan.mdc`、`python-learning-checklist.mdc`
