@@ -12,11 +12,11 @@
 ## 基本项目信息
 
 - **项目名称**：Python Agent 学习项目（后端部分）
-- **当前阶段**：阶段 4（Agent 工具系统）持续推进；**React 前端已与后端联调**（health、tasks、agent/run、agent/last-step、**agent/steps**）。
-  - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks，与命令行共用 TASK_LIST）
+- **当前阶段**：阶段 4 已收尾；**阶段 6（数据库 + ORM + Alembic）持续推进中**；任务 REST + 命令行工具（list/add/delete）已统一读写 PostgreSQL。**React 前端已与后端联调**（health、tasks、agent/run、agent/last-step、**agent/steps**）。
+  - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks）
   - ✅ 前端 **阶段 2（组件拆分）** 已完成（`HealthHeader`、`AgentCommand`、`LastStep`、`StepList`、`TaskSection` 等，见 `frontend/readme.md`）。
   - 🔄 **前端下一步**：**阶段 3**（请求层与错误体验：`http` 错误分类、React Query 错误态等，见 `frontend/.cursor/rules/frontend-study-plan.mdc`）。
-  - 🔄 **后端下一步（可选）**：`step_history` 用 **`deque(maxlen=N)`** 限内存；或进入 **阶段 6（数据库 + ORM + 迁移）**（见下方「下一次学习的起点」）。
+  - 🔄 **后端下一步**：`Step` 历史落库（替代纯内存历史）；完善数据库会话与配置管理；逐步进入阶段 7（容器化）。
 - **主要目标**：
   - 搭建命令行 Agent 雏形（支持基础命令）✅
   - Web API（FastAPI）与命令行共用逻辑 ✅
@@ -35,14 +35,26 @@
 
 ---
 
-## 最近一次学习（日期：2026-03-24）
+## 最近一次学习（日期：2026-03-26）
 
-### 本次提交补充记录（后端阶段 4 收尾）
+### 本次提交补充记录（后端阶段 6 深化：配置化 + 依赖注入 + Step 历史落库）
 
-- **后端**：完成 **`step_history` 限长改造**：`src/commands.py` 中 `AGENT.step_history` 从 `list` 调整为 **`collections.deque(maxlen=50)`**，避免历史无限增长。
-- **后端**：完成 **`GET /agent/steps` 兼容处理**：`src/api.py` 中先 `list(AGENT.step_history)` 再进行 `reversed + limit` 截断，确保 JSON 返回稳定。
-- **后端**：已完成接口验证：`curl /agent/steps?limit=5` 返回最近 5 条，顺序与成功/失败记录均正确。
-- **前端**：今晚开始继续完善前端代码；后端数据库对接任务顺延到明天开始。
+- **环境**：本地安装 **Postgres.app**（PostgreSQL 18，端口 **5432**），建库 **`agent_db`**。
+- **依赖**：虚拟环境安装 **SQLAlchemy 2.x、Alembic、psycopg[binary]**，并记入 `requirements.txt`（以本机为准）。
+- **工程**：`alembic init alembic`，`alembic.ini` 配置 `postgresql+psycopg://postgres@127.0.0.1:5432/agent_db`，`alembic current` / `revision --autogenerate` / `upgrade head` 跑通；库中已有 **`tasks`**、**`alembic_version`** 表。
+- **代码**：`src/db/`（`config` / `base` / `session`）、`src/models/task.py`（`TaskModel`）、`alembic/env.py` 挂接 **`target_metadata = Base.metadata`**。
+- **API**：`src/api.py` 中 **`GET/POST/DELETE /tasks`** 已改为读写数据库；`curl` 验证：创建 → 列表有数据 → 删除 → 列表为空；重复删除返回 **「没有找到任务」**。
+- **配置化**：新增 `.env` / `.env.example`，`src/db/config.py` 使用 `python-dotenv` + `os.getenv("DATABASE_URL")` 读取连接串，`.gitignore` 已忽略 `.env`。
+- **迁移配置对齐**：`alembic/env.py` 支持读取环境变量并覆盖 `sqlalchemy.url`，`alembic current` 正常到 `e17858ab7695 (head)`。
+- **会话管理工程化**：新增 `src/db/deps.py`，任务路由改为 **`Depends(get_db)`** 注入会话，减少重复 `with SessionLocal()`。
+- **单一数据源**：`src/commands.py` 中 `tool_list/tool_add/tool_delete` 已切换数据库，命令行与 API 使用同一 `tasks` 数据源。
+- **Step 历史持久化**：新增 `src/models/step.py`（`agent_steps` 表）与迁移；修复一次空迁移问题后，补充迁移已成功建表（当前表：`tasks`、`agent_steps`、`alembic_version`）。
+- **Agent 接口读库**：`GET /agent/last-step`、`GET /agent/steps` 已切换为数据库查询；`POST /agent/run` 执行后可从数据库读到最新步骤，验证通过。
+- **本次收尾说明**：今天到此为止，下一次从「时间字段 UTC/时区统一」继续，避免后续日志与展示时间歧义。
+
+### 上一次学习（日期：2026-03-24，阶段 4 收尾）
+
+- **后端**：`step_history` 改为 **`deque(maxlen=50)`**；`/agent/steps` 使用 `list(AGENT.step_history)`；`curl` 验证通过。
 
 ### 已完成内容（历史汇总，便于换设备接续）
 
@@ -100,7 +112,7 @@
 | 3 | 阶段 3：Web API | 较难 | ✅ FastAPI /health、POST /tasks |
 | 4 | 阶段 4：Agent 工具系统 | 较难 | Task/Step 结构、工具封装 ← **收尾完成（含 steps 历史限长）** |
 | 5 | 阶段 5：自动化与视觉 | 难 | 截屏、键鼠、图像识别（预研） |
-| 6～11 | 阶段 6～11：真实项目扩展 | 较难 | **数据库+ORM+迁移**、**Docker/CI**、**pytest**、**鉴权**、**Redis/异步任务**、**可观测性与 API 规范**（详见 **`.cursor/rules/python-study-plan.mdc`**） |
+| 6～11 | 阶段 6～11：真实项目扩展 | 较难 | **数据库+ORM+迁移**（✅ 已启动：任务表 + `/tasks` 落库）、**Docker/CI**、**pytest**、**鉴权**、**Redis/异步任务**、**可观测性与 API 规范**（详见 **`.cursor/rules/python-study-plan.mdc`**） |
 
 ---
 
@@ -108,11 +120,16 @@
 
 **换设备后**：`git pull` 拉取最新代码，激活虚拟环境（`source .venv/bin/activate`），然后按下面顺序来。
 
-1. **前端（今晚优先）**：**`myproject/frontend` 阶段 3** —— 请求层与错误体验（`http.ts` 错误分类、统一提示；`useQuery` 的 **`isError`** 与重试；可选超时/Abort）。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
+1. **前端（按需）**：**`myproject/frontend` 阶段 3** —— 请求层与错误体验。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
-2. **后端（明天开始，阶段 6）**
-   - 已完成阶段 4 收尾：`step_history` 改为 **`deque(maxlen=50)`**，`/agent/steps` 已适配 `list(...)` 返回。
-   - 明天从 **PostgreSQL 对接** 开始：先做依赖安装与连接配置，再进入 SQLAlchemy/SQLModel + Alembic 迁移。
+2. **后端（阶段 6 下一步）**
+   - **时间字段 UTC 化（优先）**：参考另一个对话里的建议，优先改 `src/models/step.py` 的时间列为时区感知：
+     - `DateTime(timezone=True)`
+     - 默认值改为 `datetime.now(timezone.utc)`（替代 `utcnow()`）
+   - **展示时间统一**（建议）：`src/commands.py` 中面向展示/日志的 `datetime.now().strftime(...)` 逐步改为带 UTC 语义，降低排查混淆。
+   - **迁移判断**：若现有库列是“无时区时间”，补一条 Alembic 迁移把列类型升级为“带时区时间”。
+   - **质量收尾**：继续清理过时注释与旧文案（`TASK_LIST/tasks.json` 旧描述），保持代码与现状一致。
+   - **运维预研**：阶段 7 可开始 Docker Compose（API + PG）。
 
 3. **查阅**
    - 后端阶段与清单：`.cursor/rules/python-study-plan.mdc`、`python-learning-checklist.mdc`

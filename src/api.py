@@ -1,8 +1,16 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from dataclasses import asdict
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from src.db.deps import get_db
+
+from src.models.task import TaskModel
+from src.models.step import AgentStep
 
 try:
     from src.schemas import TaskCreate, AgentRunRequest
@@ -10,9 +18,9 @@ except ModuleNotFoundError:
     from schemas import TaskCreate, AgentRunRequest
 
 try:
-    from src.commands import TASK_LIST, AGENT, save_tasks, run_tool
+    from src.commands import AGENT, run_tool
 except ModuleNotFoundError:
-    from commands import TASK_LIST, AGENT,  save_tasks, run_tool
+    from commands import AGENT, run_tool
 
 import logging
 
@@ -47,15 +55,6 @@ def validation_exception_handler(request, exc: RequestValidationError):
     # exc.errors() 是一个列表，里面每一项是一个字段错误信息（dict）
     errors = exc.errors()
 
-    # 先去第一个错误的msg
-    # msg = "参数校验失败"
-    # if errors:
-    #     first = errors[0]
-    #     if isinstance(first, dict) and isinstance(first.get("msg"), str):
-    #         msg = first["msg"]
-    #         if ", " in msg:
-    #             msg = msg.split(", ", 1)[-1]
-
     msgs = []
     for err in errors:
         if isinstance(err, dict) and isinstance(err.get("msg"), str):
@@ -88,47 +87,47 @@ def health():
 
 # 获取任务列表
 @app.get("/tasks")
-def get_task_list():
-    return ok("请求成功", TASK_LIST if TASK_LIST else [])
+def get_task_list(db: Session = Depends(get_db)):
+    rows = db.execute(select(TaskModel).order_by(TaskModel.task_id.asc())).scalars().all()
+    data = [{"task_id": r.task_id, "task_name": r.task_name} for r in rows]
+    return ok("请求成功", data)
 
 # 添加任务接口
 @app.post("/tasks")
-def create_task(body: TaskCreate):
+def create_task(body: TaskCreate, db: Session = Depends(get_db)):
     try:
         description = body.description
+
+        exists = db.execute(
+            select(TaskModel).where(TaskModel.task_name == description)
+        ).scalar_one_or_none()
+        if exists:
+            return fail("任务已存在")
         
-        if len(TASK_LIST):
-            if any(t["task_name"] == description for t in TASK_LIST):
-                return fail("任务已存在")
-            else:
-                TASK_LIST.append(
-                    {
-                        "task_id": TASK_LIST[-1]["task_id"] + 1,
-                        "task_name": description
-                    }
-                )
-        else:
-            TASK_LIST.append(
-                {
-                    "task_id": 1,
-                    "task_name": description
-                }
-            )
-        save_tasks()
-        return ok("添加成功")
+        task = TaskModel(task_name=description)
+        db.add(task)
+        db.commit()
+        db.refresh(task)
+
+        return ok("添加成功", {"task_id": task.task_id, "task_name": task.task_name})
+        
     except Exception as e:
-        logger.error("添加任务失败: %s", e)
+        logger.info("添加任务失败 %s", e)
         return fail("添加失败")
+
+
+
 
 # 删除任务接口
 @app.delete("/tasks/{task_id}")
-def delete_task(task_id: int):
-    if any(t["task_id"] == task_id for t in TASK_LIST):
-        TASK_LIST[:] = [t for t in TASK_LIST if t["task_id"] != task_id]
-        save_tasks()
-        return ok("删除任务成功")
-    else:
+def delete_task(task_id: int, db: Session = Depends(get_db)):
+    task = db.get(TaskModel, task_id)
+    if task is None:
         return fail("没有找到任务")
+    
+    db.delete(task)
+    db.commit()
+    return ok("删除任务成功")
     
 # 调用命令集
 @app.post("/agent/run")
@@ -141,16 +140,45 @@ def use_tool(body: AgentRunRequest):
 
 # 获取最后一步操作内容
 @app.get("/agent/last-step")
-def get_last_step():
-    if AGENT.last_step is None:
+def get_last_step(db: Session = Depends(get_db)):
+    # if AGENT.last_step is None:
+    #     return fail("暂无执行记录")
+    # return ok("查询成功", AGENT.last_step)
+    row = db.execute(
+        select(AgentStep).order_by(AgentStep.step_id.desc()).limit(1)
+    ).scalar_one_or_none()
+    
+    if row is None:
         return fail("暂无执行记录")
-    return ok("查询成功", AGENT.last_step)
+    
+    data = {
+        "tool_name": row.tool_name,
+        "input_text": row.input_text,
+        "ok_flag": row.ok_flag,
+        "msg": row.msg,
+        "timestamp": row.timestamp,
+    }
+    return ok("请求成功", data)
+
+
+
 
 # 获取操作历史记录
 @app.get("/agent/steps")
-def get_steps(limit: int = Query(20, ge=1, le=100)):
-    raw = list(AGENT.step_history)
-    if not raw:
-        return ok("查询成功", [])
-    recent = list(reversed(raw))[:limit]
-    return ok("查询成功", [asdict(s) for s in recent])
+def get_steps(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
+    # raw = list(AGENT.step_history)
+    # if not raw:
+    #     return ok("查询成功", [])
+    # recent = list(reversed(raw))[:limit]
+    # return ok("查询成功", [asdict(s) for s in recent])
+    rows = db.execute(
+        select(AgentStep).order_by(AgentStep.step_id.desc()).limit(limit)
+    ).scalars().all()
+    data = [{
+        "tool_name": r.tool_name,
+        "input_text": r.input_text,
+        "ok_flag": r.ok_flag,
+        "msg": r.msg,
+        "timestamp": r.timestamp,
+    } for r in rows]
+    return ok("请求成功", data)

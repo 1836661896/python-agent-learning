@@ -1,7 +1,7 @@
 # WELCOME_MESSAGE = "欢迎来到 Python Agent 学习项目！"
 # HINT_MESSAGE = "输入命令，输入 quit 退出。"
 # HELP_MESSAGE = "当前支持的命令：\n - help：展示当前可输入的指令\n - quit：退出聊天\n 其他内容：直接展示"
-from commands import show_message, handle_command, save_tasks
+from commands import show_message, handle_command
 import logging
 
 def main():
@@ -23,7 +23,6 @@ def main():
             should_continue = handle_command(command)
 
             if not should_continue:
-                save_tasks()
                 logging.info("用户退出，已保存任务")
                 break
     
@@ -33,7 +32,6 @@ def main():
                 command = input(">>> ")
                 if command.strip().lower() == "y":
                     print("退出成功！")
-                    save_tasks()
                     logging.info("用户确认退出，已保存任务")
                     break
             except (KeyboardInterrupt, EOFError):

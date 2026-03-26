@@ -12,12 +12,17 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 from collections import deque
+
+from sqlalchemy import select
+
+from src.db.session import SessionLocal
+from src.models.task import TaskModel
+from src.models.step import AgentStep
 
 logger = logging.getLogger(__name__)
 
@@ -47,23 +52,6 @@ SYSTEM_MESSAGE = {
     "invalid_command": "未知命令格式，请直接输入文本或输入 help 查看帮助",
 }
 
-TASK_FILE = "tasks.json"
-# 类型注解：给 IDE / mypy 等静态检查用，类似 TS 的变量类型；运行时仍是普通 list，不会自动校验元素形状
-TASK_LIST: list[dict[str, Any]] = []
-
-# 启动时尝试从磁盘恢复任务；文件不存在或 JSON 损坏时保持空列表，不中断启动
-try:
-    with open(TASK_FILE, "r", encoding="utf-8") as f:
-        data = f.read()
-        if data.strip():
-            TASK_LIST = json.loads(data)
-except FileNotFoundError:
-    pass
-except json.JSONDecodeError:
-    pass
-
-logger.info("已加载任务列表，共 %s 条", len(TASK_LIST))
-
 
 def adjust_command(command: str) -> str:
     """从整条命令里取出「第一个词之后」的文本。
@@ -82,17 +70,6 @@ def adjust_command(command: str) -> str:
     if len(parts) == 1:
         return ""
     return " ".join(parts[1:])
-
-
-def save_tasks() -> None:
-    """把 ``TASK_LIST`` 序列化为 JSON 写入 ``TASK_FILE``。
-
-    在添加/删除任务成功后调用，保证磁盘与内存一致。
-    ``ensure_ascii=False`` 便于中文可读；``indent=2`` 便于人工查看 diff。
-    """
-    with open(TASK_FILE, "w", encoding="utf-8") as f:
-        f.write(json.dumps(TASK_LIST, ensure_ascii=False, indent=2))
-    logger.info("已保存任务列表，共 %s 条", len(TASK_LIST))
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +125,18 @@ def format_step(step: Step) -> str:
 def _record_step(self, step: Step) -> None:
     self.last_step = step
     self.step_history.append(step)
+    with SessionLocal() as db:
+        try:
+            agent_step = AgentStep(
+                tool_name = step.tool_name,
+                input_text = step.input_text,
+                ok_flag = step.ok_flag,
+                msg = step.msg,
+            )
+            db.add(agent_step)
+            db.commit()
+        except Exception as e:
+            db.rollback()
 
 
 class Agent:
@@ -247,7 +236,13 @@ def match_version(cmd: str) -> bool:
 
 def tool_list(cmd: str) -> tuple[bool, str, Any]:
     """返回当前任务列表引用（成功时 data 为 ``TASK_LIST``）。"""
-    return True, "ok", TASK_LIST
+    # return True, "ok", TASK_LIST
+    with SessionLocal() as db:
+        row = db.execute(select(TaskModel).order_by(TaskModel.task_id.asc())).scalars().all()
+        data = [{"task_id": r.task_id, "task_name": r.task_name} for r in row]
+        return True, "ok", data
+    
+
 
 
 def tool_add(cmd: str) -> tuple[bool, str, Any]:
@@ -259,15 +254,20 @@ def tool_add(cmd: str) -> tuple[bool, str, Any]:
     task_content = adjust_command(cmd)
     if not task_content:
         return False, "未输入任务内容", None
+    with SessionLocal() as db:
+        if db.execute(
+            select(TaskModel).where(TaskModel.task_name == task_content)
+        ).scalar_one_or_none():
+            return False, "任务已存在", None
+        
+        task = TaskModel(task_name = task_content)
+        db.add(task)
+        db.commit()
+        db.refresh(task)
 
-    if any(t["task_name"] == task_content for t in TASK_LIST):
-        return False, "任务已存在", None
+        return True, "添加成功", {"task_id": task.task_id, "task_name": task.task_name}
+        
 
-    task_id = TASK_LIST[-1]["task_id"] + 1 if TASK_LIST else 1
-    task = {"task_id": task_id, "task_name": task_content}
-    TASK_LIST.append(task)
-    save_tasks()
-    return True, "添加成功", task
 
 
 def tool_delete(cmd: str) -> tuple[bool, str, Any]:
@@ -281,12 +281,14 @@ def tool_delete(cmd: str) -> tuple[bool, str, Any]:
     except ValueError:
         return False, "任务id必须是数字", None
 
-    if any(t["task_id"] == task_id for t in TASK_LIST):
-        # TASK_LIST[:] = … 原地替换元素，变量名仍指向同一 list 对象，import 本模块的其它代码看到的仍是「同一个列表」
-        TASK_LIST[:] = [t for t in TASK_LIST if t["task_id"] != task_id]
-        save_tasks()
+    with SessionLocal() as db:
+        task = db.get(TaskModel, task_id)
+        if task is None:
+            return False, "未找到任务", None
+        db.delete(task)
+        db.commit()
         return True, "删除任务成功", None
-    return False, "未找到任务", None
+
 
 
 def tool_echo(cmd: str) -> tuple[bool, str, Any]:
