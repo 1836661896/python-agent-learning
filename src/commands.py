@@ -1,8 +1,9 @@
 """命令行与 Agent 工具模块。
 
 职责概览：
-    - 维护内存中的任务列表 ``TASK_LIST``，并与 ``tasks.json`` 同步；
     - 通过 ``Agent`` + ``Tool`` 将用户输入路由到具体工具（list/add/delete 等）；
+    - 任务相关工具读写 PostgreSQL（``TaskModel`` + ``SessionLocal``）；
+    - Step 执行记录同时写入内存短历史（``deque``）与数据库（``agent_steps``）；
     - ``run_tool`` 供 API 与命令行共用；``handle_command`` 仅负责命令行交互（quit、非法前缀、打印）。
 
 约定：
@@ -136,6 +137,7 @@ def _record_step(self, step: Step) -> None:
             db.add(agent_step)
             db.commit()
         except Exception as e:
+            logger.error(f"历史操作记录失败，失败原因： {e}")
             db.rollback()
 
 
@@ -231,25 +233,19 @@ def match_version(cmd: str) -> bool:
     return cmd == "version"
 
 
-# --- tool_*：真正读写 TASK_LIST 或返回展示数据；与 API 共用，因此用返回值而非 print ---
-
-
 def tool_list(cmd: str) -> tuple[bool, str, Any]:
-    """返回当前任务列表引用（成功时 data 为 ``TASK_LIST``）。"""
-    # return True, "ok", TASK_LIST
+    """查询数据库任务列表并返回任务字典列表"""
     with SessionLocal() as db:
         row = db.execute(select(TaskModel).order_by(TaskModel.task_id.asc())).scalars().all()
         data = [{"task_id": r.task_id, "task_name": r.task_name} for r in row]
         return True, "ok", data
     
-
-
-
 def tool_add(cmd: str) -> tuple[bool, str, Any]:
-    """解析 ``add …``，追加任务并 ``save_tasks``。
+    """解析 ``add …``，写入数据库任务表并返回新任务信息。
 
-    任务 id：在现有最大 ``task_id`` 上加 1；列表为空则从 1 开始。
-    同名任务拒绝重复添加。
+    说明：
+        - 任务主键由数据库自增生成；
+        - 同名任务拒绝重复添加。
     """
     task_content = adjust_command(cmd)
     if not task_content:

@@ -141,9 +141,6 @@ def use_tool(body: AgentRunRequest):
 # 获取最后一步操作内容
 @app.get("/agent/last-step")
 def get_last_step(db: Session = Depends(get_db)):
-    # if AGENT.last_step is None:
-    #     return fail("暂无执行记录")
-    # return ok("查询成功", AGENT.last_step)
     row = db.execute(
         select(AgentStep).order_by(AgentStep.step_id.desc()).limit(1)
     ).scalar_one_or_none()
@@ -156,9 +153,9 @@ def get_last_step(db: Session = Depends(get_db)):
         "input_text": row.input_text,
         "ok_flag": row.ok_flag,
         "msg": row.msg,
-        "timestamp": row.timestamp,
+        "timestamp": row.timestamp.strftime("%Y-%m-%d %H:%M:%S %Z"),
     }
-    return ok("请求成功", data)
+    return ok("查询成功", data)
 
 
 
@@ -166,11 +163,6 @@ def get_last_step(db: Session = Depends(get_db)):
 # 获取操作历史记录
 @app.get("/agent/steps")
 def get_steps(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db)):
-    # raw = list(AGENT.step_history)
-    # if not raw:
-    #     return ok("查询成功", [])
-    # recent = list(reversed(raw))[:limit]
-    # return ok("查询成功", [asdict(s) for s in recent])
     rows = db.execute(
         select(AgentStep).order_by(AgentStep.step_id.desc()).limit(limit)
     ).scalars().all()
@@ -179,6 +171,8 @@ def get_steps(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db
         "input_text": r.input_text,
         "ok_flag": r.ok_flag,
         "msg": r.msg,
-        "timestamp": r.timestamp,
+        "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M:%S %Z"),
     } for r in rows]
-    return ok("请求成功", data)
+    if not data:
+        return fail("暂无操作历史", [])
+    return ok("查询成功", data)

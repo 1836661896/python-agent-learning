@@ -12,11 +12,11 @@
 ## 基本项目信息
 
 - **项目名称**：Python Agent 学习项目（后端部分）
-- **当前阶段**：阶段 4 已收尾；**阶段 6（数据库 + ORM + Alembic）持续推进中**；任务 REST + 命令行工具（list/add/delete）已统一读写 PostgreSQL。**React 前端已与后端联调**（health、tasks、agent/run、agent/last-step、**agent/steps**）。
+- **当前阶段**：阶段 4 已收尾；**阶段 6（数据库 + ORM + Alembic）** 任务与 Agent 步骤已落库；**阶段 8 已接入最小 pytest**（`GET /health`）。**React 前端已与后端联调**（health、tasks、agent/run、agent/last-step、**agent/steps**）。
   - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks）
   - ✅ 前端 **阶段 2（组件拆分）** 已完成（`HealthHeader`、`AgentCommand`、`LastStep`、`StepList`、`TaskSection` 等，见 `frontend/readme.md`）。
   - 🔄 **前端下一步**：**阶段 3**（请求层与错误体验：`http` 错误分类、React Query 错误态等，见 `frontend/.cursor/rules/frontend-study-plan.mdc`）。
-  - 🔄 **后端下一步**：`Step` 历史落库（替代纯内存历史）；完善数据库会话与配置管理；逐步进入阶段 7（容器化）。
+  - 🔄 **后端下一步**：时间字段 UTC/时区统一；扩展 pytest（如 `/tasks`、含数据库的用例）；**Docker Compose 置后**（与学习计划一致，最后再收口容器化）。
 - **主要目标**：
   - 搭建命令行 Agent 雏形（支持基础命令）✅
   - Web API（FastAPI）与命令行共用逻辑 ✅
@@ -35,9 +35,16 @@
 
 ---
 
-## 最近一次学习（日期：2026-03-26）
+## 最近一次学习（日期：2026-03-27）
 
-### 本次提交补充记录（后端阶段 6 深化：配置化 + 依赖注入 + Step 历史落库）
+### 本次提交补充记录（阶段 8 启动：pytest + Agent 步骤 API 小调整 + 注释与文档对齐）
+
+- **测试**：新增 `pytest.ini`（`pythonpath = .`），`tests/test_health.py` 断言 `GET /health` 返回 200 且 `code == 0`；`requirements.txt` 增加 **`httpx>=0.28.0`**（`TestClient` 依赖）。
+- **API**：`GET /agent/last-step`、`GET /agent/steps` 中 **时间戳** 改为 `strftime` 字符串；成功文案统一为 **「查询成功」**；无历史时 **`/agent/steps`** 返回 `fail("暂无操作历史", [])`；删除已不再使用的内存历史相关注释。
+- **命令与 Agent**：`src/commands.py` 顶部说明改为与 **PostgreSQL + agent_steps** 一致；`_record_step` 异常分支增加 **`logger.error`**；`tool_list` docstring 与过时「TASK_LIST」表述清理。
+- **可选纳入版本库**：根目录 **`docker-compose.yml`**（本地 Postgres 编排）若你希望仓库里就能一键起库，可随本次一并 `git add`；若只在本机用 Postgres.app，也可暂缓提交。
+
+### 上一次学习（日期：2026-03-26，后端阶段 6 深化：配置化 + 依赖注入 + Step 历史落库）
 
 - **环境**：本地安装 **Postgres.app**（PostgreSQL 18，端口 **5432**），建库 **`agent_db`**。
 - **依赖**：虚拟环境安装 **SQLAlchemy 2.x、Alembic、psycopg[binary]**，并记入 `requirements.txt`（以本机为准）。
@@ -50,7 +57,7 @@
 - **单一数据源**：`src/commands.py` 中 `tool_list/tool_add/tool_delete` 已切换数据库，命令行与 API 使用同一 `tasks` 数据源。
 - **Step 历史持久化**：新增 `src/models/step.py`（`agent_steps` 表）与迁移；修复一次空迁移问题后，补充迁移已成功建表（当前表：`tasks`、`agent_steps`、`alembic_version`）。
 - **Agent 接口读库**：`GET /agent/last-step`、`GET /agent/steps` 已切换为数据库查询；`POST /agent/run` 执行后可从数据库读到最新步骤，验证通过。
-- **本次收尾说明**：今天到此为止，下一次从「时间字段 UTC/时区统一」继续，避免后续日志与展示时间歧义。
+- **本次收尾说明**：当时约定下一次从「时间字段 UTC/时区统一」继续（仍建议在扩展测试与前端联调前完成）。
 
 ### 上一次学习（日期：2026-03-24，阶段 4 收尾）
 
@@ -112,7 +119,7 @@
 | 3 | 阶段 3：Web API | 较难 | ✅ FastAPI /health、POST /tasks |
 | 4 | 阶段 4：Agent 工具系统 | 较难 | Task/Step 结构、工具封装 ← **收尾完成（含 steps 历史限长）** |
 | 5 | 阶段 5：自动化与视觉 | 难 | 截屏、键鼠、图像识别（预研） |
-| 6～11 | 阶段 6～11：真实项目扩展 | 较难 | **数据库+ORM+迁移**（✅ 已启动：任务表 + `/tasks` 落库）、**Docker/CI**、**pytest**、**鉴权**、**Redis/异步任务**、**可观测性与 API 规范**（详见 **`.cursor/rules/python-study-plan.mdc`**） |
+| 6～11 | 阶段 6～11：真实项目扩展 | 较难 | **数据库+ORM+迁移**（✅ 任务与步骤落库）、**Docker/CI**（Docker 后置）、**pytest**（✅ 已启动：`/health`）、**鉴权**、**Redis/异步任务**、**可观测性与 API 规范**（详见 **`.cursor/rules/python-study-plan.mdc`**） |
 
 ---
 
@@ -122,14 +129,11 @@
 
 1. **前端（按需）**：**`myproject/frontend` 阶段 3** —— 请求层与错误体验。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
-2. **后端（阶段 6 下一步）**
-   - **时间字段 UTC 化（优先）**：参考另一个对话里的建议，优先改 `src/models/step.py` 的时间列为时区感知：
-     - `DateTime(timezone=True)`
-     - 默认值改为 `datetime.now(timezone.utc)`（替代 `utcnow()`）
-   - **展示时间统一**（建议）：`src/commands.py` 中面向展示/日志的 `datetime.now().strftime(...)` 逐步改为带 UTC 语义，降低排查混淆。
-   - **迁移判断**：若现有库列是“无时区时间”，补一条 Alembic 迁移把列类型升级为“带时区时间”。
-   - **质量收尾**：继续清理过时注释与旧文案（`TASK_LIST/tasks.json` 旧描述），保持代码与现状一致。
-   - **运维预研**：阶段 7 可开始 Docker Compose（API + PG）。
+2. **后端**
+   - **时间字段 UTC 化（优先）**：`src/models/step.py` 使用 `DateTime(timezone=True)`，默认 `datetime.now(timezone.utc)`；API 展示与 DB 类型一致；必要时 Alembic 迁列型。
+   - **pytest 扩展**：为 `GET/POST/DELETE /tasks`、`POST /agent/run` + 读库等在本地有 PG 的前提下增加用例（注意测试库/事务隔离或专用测试库）。
+   - **质量**：注释与 README 与「库表即真相」保持一致。
+   - **阶段 7 Docker**：放在较后收尾（API + PG 一键起）；当前可用 Postgres.app 或自选 compose。
 
 3. **查阅**
    - 后端阶段与清单：`.cursor/rules/python-study-plan.mdc`、`python-learning-checklist.mdc`
