@@ -1,0 +1,4 @@
+# 开发依赖：格式化与静态检查（与 pyproject.toml 中 [tool.ruff] 一致）
+# 安装：pip install -r requirements-dev.txt
+-r requirements.txt
+ruff>=0.8.0

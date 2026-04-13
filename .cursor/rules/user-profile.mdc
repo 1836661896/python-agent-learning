@@ -23,7 +23,7 @@ alwaysApply: true
 ## 编程与学习背景
 
 - **编程经验**：有 **JavaScript/TypeScript** 背景，能通过类比理解 Python（如 interface ↔ Pydantic BaseModel、catch/throw ↔ except/raise）。
-- **Python**：从零学起，结合本项目（命令行 Agent → Web API → 未来自动化）边做边学。
+- **Python**：从零学起，结合本项目（基础 Agent → Web API 服务化 → 未来自动化）边做边学。
 - **学习偏好**：
   - **项目驱动**：不喜欢纯练习、无实际应用的语法练习；希望知识点在完善项目的各步骤中**按需、分散**引入，不要某一天集中练完一整类方法。
   - **理解优先**：会追问「为什么」「等价吗」「怎么用」（如 `if not description` 与 `if description == ""`、`classmethod` 是什么、`raise` 是否专用词）。
@@ -35,7 +35,8 @@ alwaysApply: true
 ## 项目与进度（随学习更新）
 
 - **项目性质**：学习项目；首要目标是**学会**，其次才是完成功能。
-- **当前进度**：阶段 0～4 核心能力已具备（Agent、`/agent/run`、`/agent/last-step`、`/agent/steps`、FastAPI 与命令行共用任务逻辑）；**React 前端已搭建并联调**，**前端阶段 2（组件拆分）已完成**，下一步：**前端阶段 3（错误体验）**；后端可选 **deque 限历史** 或 **阶段 6 数据库**。
+- **当前进度**：后端已完成服务化重构（`src/agent_service.py`、`src/routers/*`、`src/schemas/*`、统一响应层 `src/api_response.py`），接口 `health/tasks/agent/chat`、`agent/nl-run` 等可稳定供前端调用；`pytest` 以仓库现状为准。前端已 **左栏 + 右栏 `ChatPanel`** 布局并联调上述接口（详见 **`frontend/readme.md`**）。
+- **近期目标（2026-04-09 共识，详见 `backend/readme.md`）**：后端侧重 **聊天流式（SSE 等）**、**左侧统一操作记录（按 type 区分聊天/任务/工具）**、**大模型分级路由（渐进）**；合规上不以「外网搬运视频到 B 站/抖音」为项目目标。前端继续 **阶段 3** 并预留流式消费；**鉴权（阶段 9）** 在流式/工具对外前评估。
 - **前端**：**React**（`myproject/frontend`），与后端 API 联调；进度见 **`frontend/readme.md`**。
 - **多设备/新对话**：会换设备或新开 Cursor 窗口；依赖 **readme**、**study-plan**、**checklist** 同步进度；希望助手在新对话时先读这三份再继续。
 
@@ -66,4 +67,4 @@ alwaysApply: true
 
 ## 技术环境（若已知）
 
-- 当前工作路径含 `backend`，存在 `src/main.py`、`src/commands.py`、`src/api.py`、`.venv`、`readme.md` 等；具体 OS/Shell 以用户实际环境为准，换设备后可能变化。
+- 当前工作路径含 `backend`，核心结构包含 `src/main.py`、`src/api.py`、`src/agent_service.py`、`src/routers/`、`src/schemas/`、`.venv`、`readme.md` 等；具体 OS/Shell 以用户实际环境为准，换设备后可能变化。

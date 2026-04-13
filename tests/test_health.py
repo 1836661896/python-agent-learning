@@ -6,9 +6,9 @@ client = TestClient(app)
 
 
 def test_health_ok():
-  response = client.get("/health")
-  assert response.status_code == 200
+    response = client.get("/health")
+    assert response.status_code == 200
 
-  data = response.json()
-  assert data["code"] == 0
-  assert isinstance(data["msg"], str)
+    data = response.json()
+    assert data["code"] == 0
+    assert isinstance(data["msg"], str)
