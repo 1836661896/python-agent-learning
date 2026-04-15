@@ -3,6 +3,7 @@
 venv/
 env/
 .env
+.venv*
 
 # 忽略 Python 编译缓存
 __pycache__/

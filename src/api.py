@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api_response import fail, ok
-from src.routers import agent_router, chat_router, tasks_router
+from src.routers import agent_router, chat_router, mcp_router, tasks_router
 
 logger = logging.getLogger(__name__)
 
@@ -55,3 +55,4 @@ def health():
 app.include_router(tasks_router)
 app.include_router(agent_router)
 app.include_router(chat_router)
+app.include_router(mcp_router)

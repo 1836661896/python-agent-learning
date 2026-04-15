@@ -9,10 +9,13 @@ from src.agent_service import run_tool
 from src.api_response import fail, ok
 from src.llm.intent import classify_route
 from src.llm.ollama_client import chat_simple, chat_streaming, nl_to_command
+from src.mcp import MCPClient
+from src.mcp.commands import parse_mcp_call
 from src.schemas import ChatRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
+mcp_client = MCPClient()
 
 
 @router.post("/chat")
@@ -43,12 +46,51 @@ def _is_allowed_nl_command(cmd: str) -> bool:
     return cmd.startswith("echo ") or cmd.startswith("add ")
 
 
+def _steam_mcp_tool(tool_name: str, args: dict):
+    allowed = mcp_client.allowed_tool_names()
+    if tool_name not in allowed:
+        yield _sse_data(
+            {
+                "type": "error",
+                "msg": "不允许调用该 MCP 工具",
+                "allowed": sorted(allowed),
+            }
+        )
+        yield _sse_data({"type": "done"})
+        return
+
+    result = mcp_client.call_tool(tool_name, args)
+    if not result.get("ok"):
+        yield _sse_data({"type": "error", "msg": result.get("msg", "tool error")})
+        yield _sse_data({"type": "done"})
+        return
+
+    data = result.get("data") or {}
+    yield _sse_data({"type": "delta", "text": data.get("text", "")})
+    yield _sse_data(
+        {
+            "type": "tool_result",
+            "ok": True,
+            "route": "mcp",
+            "tool_name": tool_name,
+            "data": data,
+        }
+    )
+    yield _sse_data({"type": "done"})
+
+
 def _event_stream(message: str):
     """
     SSE 生成器：根据意图走「纯聊天流式」或「自然语言转命令再 run_tool」。
     时间类型：delta（征文）/toole_result（结构化结果，可选给前端刷新列表）/done/error。
     """
     try:
+        parsed = parse_mcp_call(message)
+        if parsed:
+            tool_name, args = parsed
+            yield from _steam_mcp_tool(tool_name, args)
+            return
+
         # ① 规则路由： 不调用大模型；只决定走 chat 还是 agent
         route = classify_route(message)
 

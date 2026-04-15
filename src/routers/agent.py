@@ -7,9 +7,13 @@ from src.agent_service import run_tool
 from src.api_response import fail, ok
 from src.db.deps import get_db
 from src.llm.ollama_client import nl_to_command
+from src.mcp import MCPClient
+from src.mcp.commands import parse_mcp_call
 from src.models.step import AgentStep
 from src.schemas import AgentNlRunRequest, AgentRunRequest
 from src.utils.datetime_fmt import format_step_ts_utc
+
+mcp_client = MCPClient()
 
 router = APIRouter(tags=["agent"])
 
@@ -30,10 +34,36 @@ def _is_allowed_command(cmd: str) -> bool:
     return cmd.startswith("echo ") or cmd.startswith("add ")
 
 
+def _run_mcp_tool(tool_name: str, args: dict):
+    mcp_result = mcp_client.call_tool(tool_name, args)
+    if mcp_result.get("ok"):
+        return ok(
+            "执行成功",
+            {
+                "route": "mcp",
+                "tool_name": tool_name,
+                "result": mcp_result.get("data"),
+            },
+        )
+    return fail(
+        "执行失败",
+        {
+            "route": "mcp",
+            "tool_name": tool_name,
+            "detail": mcp_result,
+        },
+    )
+
+
 @router.post("/agent/nl-run")
 def run_nl_command(body: AgentNlRunRequest):
     """自然语言 -> 命令 -> 执行，给前端返回命令与执行结果。"""
     try:
+        parsed = parse_mcp_call(body.text)
+        if parsed:
+            tool_name, args = parsed
+            return _run_mcp_tool(tool_name, args)
+
         cmd = nl_to_command(body.text)
         if not _is_allowed_command(cmd):
             return fail(
@@ -50,6 +80,35 @@ def run_nl_command(body: AgentNlRunRequest):
         return fail("无法连接本机 Ollama")
     except Exception as e:
         return fail(str(e))
+
+
+@router.post("/agent/mcp-run")
+def run_mcp_tool(body: dict):
+    """
+    请求示例:
+    {
+      "tool_name": "ping",
+      "args": {}
+    }
+    """
+    tool_name = str(body.get("tool_name", "")).strip()
+    args = body.get("args", {})
+
+    if not tool_name:
+        return fail("tool_name 不能为空")
+    if not isinstance(args, dict):
+        return fail("args 必须是对象")
+    allowed = mcp_client.allowed_tool_names()
+    if tool_name not in allowed:
+        return fail("不允许调用该 MCP 工具", {"allowed": sorted(allowed)})
+
+    try:
+        result = mcp_client.call_tool(tool_name, args)
+        if result.get("ok"):
+            return ok("执行成功", result.get("data"))
+        return fail(result.get("msg", "执行失败"), result.get("data"))
+    except Exception as e:
+        return fail(f"MCP 调用异常： {e}")
 
 
 @router.get("/agent/last-step")
