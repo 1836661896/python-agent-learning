@@ -1,5 +1,5 @@
-"""LLM 相关能力导出。"""
+"""LLM 模块统一导出入口。"""
 
-from .ollama_client import chat_simple, nl_to_command
+from .llm_factory import get_llm_client
 
-__all__ = ["chat_simple", "nl_to_command"]
+__all__ = ["get_llm_client"]

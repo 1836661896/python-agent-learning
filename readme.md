@@ -16,7 +16,7 @@
   - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks）
   - ✅ 前端 **阶段 2（组件拆分）** 已完成（`HealthHeader`、`AgentCommand`、`LastStep`、`StepList`、`TaskSection` 等，见 `frontend/readme.md`）。
   - 🔄 **前端下一步**：**阶段 3**（请求层与错误体验）；已与 **`POST /chat`**、**`POST /agent/nl-run`** 联调（见 **`frontend/readme.md`**）；后续配合后端 **流式 SSE** 扩展 `ChatPanel`。
-  - 🔄 **后端下一步**：**聊天流式 + 左侧统一时间线**（见下文「产品/架构共识」）；延续 **NL → 工具** 的结构化与白名单；**鉴权（阶段 9）**；可选 **`/chat` pytest**、**`TEST_DATABASE_URL`**；按需整理 **Alembic 历史重复 revision**。
+  - 🔄 **后端下一步**：**聊天流式 + 左侧统一时间线**（见下文「产品/架构共识」）；**`GET /events` 已支持筛选与分页**（见「最近一次学习」）；新增支线 **后端会话式文档助手**（多轮澄清 → 生成 docx，会话状态落库，见下文「支线：后端会话式文档生成」）；延续 **NL → 工具** 与白名单；**鉴权（阶段 9）**；按需 **`TEST_DATABASE_URL`**。
 - **主要目标**：
   - 搭建 Agent 雏形（支持基础命令，历史阶段）✅
   - Web API（FastAPI）作为核心服务层（当前主线）✅
@@ -60,7 +60,130 @@
 
 ---
 
-## 最近一次学习（日期：2026-04-08）
+## 支线：后端会话式文档生成（规划归档，2026-05-02）
+
+> **目标**：用户在前端用自然语言提出需求（如「明天的行程计划」），由 **后端持有会话状态**；模型在多轮对话中 **追问缺失信息**，信息齐备后 **生成 Word（`.docx`）** 并提供下载。优先 **稳定可用**（可恢复、可审计、可测试），而非一次性脚本。
+
+### 为何会话放在后端
+
+- **状态权威**：`session_id`、历史消息、结构化槽位（起床时间、必做事项等）存数据库，刷新页面/换设备可接续（在鉴权前提下可按用户隔离）。
+- **安全**：API Key、模型调用、文件生成路径均在服务端控制；前端只传文本与 `session_id`。
+- **一致**：与现有 **`events` 时间线**、`request_id` 观测习惯对齐，便于排障。
+
+### 稳定可用实现要点（摘要）
+
+| 层次 | 做法 |
+|------|------|
+| **数据** | 两张表（推荐）：**会话表**（id、状态机阶段、可选 JSON「已收集字段」快照）+ **消息表**（session_id、role、content、可选 token 统计）；或消息 JSON 数组存会话表（简单但查询与迁移较弱）。 |
+| **状态机** | 明确阶段：`collecting`（追问）→ `ready_to_generate` → `completed` / `failed`；禁止模型直接写文件，仅允许在 `ready` 且校验通过后由 **代码路径** 写 docx。 |
+| **LLM** | 复用现有 `llm_client`；一轮请求：**输入**为「系统提示 + 会话摘要 + 用户最新一句」，**输出**二选一约定：**继续追问**（纯文本）或 **结构化 JSON**（如 `{"phase":"ask","questions":[...]}` / `{"phase":"finalize","slots":{...}}`），解析失败则降级为安全追问，避免执行生成。 |
+| **文档** | **`python-docx`** 生成；文件写到 **`generated/` 或配置的路径**，文件名带 `session_id` + 时间戳；提供 **`GET /doc-sessions/{id}/download`**（后续可加一次性签名或鉴权）。 |
+| **观测** | 关键步骤写入 **`events`** 或专用日志字段：`doc_session_start`、`doc_generated`、`doc_failed`。 |
+| **测试** | `TestClient` + monkeypatch `llm_client`，覆盖：创建会话 → 多轮消息 → mock 返回 finalize → 断言文件存在或响应头；无需真实调用模型。 |
+
+### 规划 API（可与实现微调）
+
+- `POST /doc-sessions`：创建会话，返回 `session_id`。
+- `POST /doc-sessions/{id}/messages`：body 为用户一句；返回助手回复文本 + 当前 `phase`。
+- `POST /doc-sessions/{id}/generate`：仅在 `ready_to_generate` 时生成 docx（或由上一轮模型输出触发，服务端校验后生成）。
+- `GET /doc-sessions/{id}/download`：下载最近一次生成的文件。
+
+### 实施顺序（教学中按步推进）
+
+1. **库表 + ORM + Alembic 迁移**（会话 + 消息）。
+2. **路由骨架 + Pydantic 模型**（创建会话、发消息），暂不接 LLM，返回 mock 回复验证链路。
+3. **接入 LLM**（固定系统提示 + JSON 协议 + 校验）。
+4. **`python-docx` 生成与下载**，路径与权限配置（`.env`）。
+5. **events 打点 + pytest**，前端最后接 API。
+
+---
+
+## 最近一次学习（日期：2026-05-02）
+
+### 本次补充（`GET /events` 时间线：筛选 + 分页）
+
+- **查询参数**：`page`（默认 1）、`limit`、`type`（URL 参数名；筛选列 **`events.type`**）、`command`（`payload.command` JSON 文本）、`status`（`all` / `success` / `failed` → `ok`）。
+- **响应**：`data.items` + `page`、`limit`、`total`（与筛选条件一致的 `COUNT`）。
+- **实现位置**：`src/routers/events.py`。
+- **自测示例**：`curl -s "http://127.0.0.1:8000/events?limit=5" | python -m json.tool`。
+
+### 规划启动（支线）
+
+- 已归档 **「后端会话式文档生成」** 的稳定路线（见上文专节）；**下一步编码**：从 **会话 + 消息表迁移与模型** 开始。
+
+---
+
+## 最近一次学习（日期：2026-05-01）
+
+### 本次补充（`/chat/stream` 手动 MCP 失败事件防回归）
+
+- **测试补强（流式 mcp）**：`tests/test_chat_stream_mcp.py` 新增两条事件断言，覆盖手动 MCP 两类失败路径：
+  - `mcp_not_allowed`：工具不在白名单时，断言事件 `type_/endpoint/ok/summary/provider_used/fallback_used` 与 `payload.error_type/allowed`。
+  - `mcp_run_failed`：工具执行返回失败时，断言事件 `type_/endpoint/ok/summary/provider_used/fallback_used` 与 `payload.error_type/detail`。
+- **验证通过**：
+  - `python -m pytest -q tests/test_chat_stream_mcp.py -k "not_allowed_records_event"` → `1 passed`
+  - `python -m pytest -q tests/test_chat_stream_mcp.py -k "run_failed_records_event"` → `1 passed`
+  - `python -m pytest -q tests/test_chat_api.py tests/test_chat_stream_plan.py tests/test_chat_stream_mcp.py` → **`12 passed`**
+
+### 本次补充（`chat.py` 全链路整理：流式/非流式事件统一 + 冗余收口）
+
+- **可观测性对齐**：`src/routers/chat.py` 的事件记录已统一收口到 `_record_chat_event`，并支持按 `endpoint` 区分 `/chat` 与 `/chat/stream`，避免流式与非流式事件混淆。
+- **语义修正**：`PlanError -> fallback chat` 的 `fallback_used` 统一为 `True`（非流式 + 流式一致），与“确实发生降级”语义对齐；对应测试断言已同步更新。
+- **流式事件补齐**：`/chat/stream` 下 `manual mcp`、`planner -> mcp`、`planner -> builtin`、`planner -> chat`、`planner fallback chat` 均已补齐事件落库，包含 `request_id/provider_used/fallback_used/planner_meta` 等关键字段。
+- **代码整理**：新增并复用若干 helper（如 `mcp/builtin payload` 组装、流式 mcp 事件记录等），减少 `chat.py` 内重复分支代码，主流程更易读、后续更易扩展。
+- **回归验证**：`python -m pytest -q tests/test_chat_api.py tests/test_chat_stream_plan.py tests/test_chat_stream_mcp.py` 通过（**10 passed**）。
+
+### 本次补充（`/chat` 事件补齐与防回归测试）
+
+- **事件补齐（非流式）**：`src/routers/chat.py` 已补齐两处落库：
+  - `PlanError -> fallback chat` 分支新增 `chat` 事件（`summary="planner fallback chat"`）。
+  - `builtin` 执行失败分支新增 `builtin failed` 事件（含 `error_type="builtin_run_failed"`）。
+- **字段一致性**：新增事件均带 `request_id`、`provider_used`、`fallback_used`、`payload.planner_meta`，与现有 `mcp/chat/builtin success` 记录结构保持一致，便于前端统一时间线展示。
+- **测试锁定回归**：`tests/test_chat_api.py` 新增两条最小用例，分别覆盖：
+  - planner 异常降级聊天时的事件记录；
+  - builtin 执行失败时的事件记录。
+- **本地验证**：`python -m pytest -q tests/test_chat_api.py -k "fallback or builtin_fail"` 通过（**2 passed, 2 deselected**）。
+
+### 本次补充（非流式 `/chat` 统一到 planner 链路 + `chat.py` 小重构）
+
+- **非流式路由统一**：`POST /chat` 已从“直接 `chat_simple`”升级为复用同一 planner 决策链路（与 `POST /chat/stream`、`POST /agent/nl-run` 对齐），统一支持 `mcp / builtin / chat` 三类分支。
+- **`planner_meta` 透传补齐**：非流式 `POST /chat` 返回体已补齐 `planner_meta`，与流式 `tool_result`、`/agent/nl-run` 一致，前端可统一消费 provider/fallback 信息。
+- **重构（不改行为）**：`src/routers/chat.py` 抽出 `_unwrap_plan_result`、`_handle_builtin_non_stream`、`_handle_mcp_non_stream`，降低 `chat()` 主流程复杂度，便于后续维护与测试。
+- **测试新增与回归**：新增 `tests/test_chat_api.py` 覆盖非流式 planner 分支与 `planner_meta`；同步回归 `tests/test_chat_stream_plan.py`、`tests/test_nl_run_api.py`，全量 `python -m pytest -q` 通过（**35 passed**）。
+
+### 本次补充（可观测性：结构化日志工具抽离 + chat/agent 日志封装）
+
+- **结构化日志工具**：新增 `src/utils/obs_log.py`（`new_request_id` + `log_event`），统一输出格式为 `event + JSON payload`，便于检索与排障。
+- **chat 日志封装**：`src/routers/chat.py` 新增 `_log_chat_success/_log_chat_error`，将 `request_id/endpoint/route_kind/provider_used/fallback_used/ok/error_type` 等字段统一收口，减少重复代码。
+- **agent 日志封装**：`src/routers/agent.py` 新增 `_log_agent_success/_log_agent_error` 并在 `/agent/nl-run` 路径打点，字段与 chat 对齐，后续可统一查询。
+- **测试断言增强**：`tests/test_chat_api.py`、`tests/test_nl_run_api.py` 增加对 `planner_meta.provider_used/fallback_used` 的断言，防止字段回归丢失。
+
+### 本次补充（provider 无关 planner + fallback + planner_meta 透传）
+
+- **planner 统一入口**：`src/llm/agent_plan.py` 新增并启用 `plan_with_llm`，由 `LLM_PROVIDER` 分派到 `plan_with_ollama` / `plan_with_zhipu`，不再由路由层感知具体 provider。
+- **fallback 能力**：新增 `LLM_FALLBACK_PROVIDER`；主 provider 失败时自动尝试备用 provider，并补充 warning/error 日志（主失败、回退成功、回退失败三类场景）。
+- **返回结构升级**：`plan_with_llm` 返回从“仅 plan”升级为 `{"plan": ..., "meta": {"provider_used": "...", "fallback_used": ...}}`，便于上层透传与观测。
+- **接口透传**：`POST /agent/nl-run` 与 `POST /chat/stream` 已透传 `planner_meta`（来源于 `plan_result.meta`），前端可直接看到本次是否发生 fallback 及最终 provider。
+- **配置补充**：`.env.example` 已补充 `LLM_FALLBACK_PROVIDER`（用于主 provider 失败时回退）。
+- **测试更新并通过**：新增/更新 `tests/test_agent_plan_provider.py`（分流、fallback 成功、主备都失败）；同步修复 `tests/test_nl_run_api.py`、`tests/test_chat_stream_plan.py` 对新返回结构的 mock 与断言；全量 `python -m pytest -q` 通过（**33 passed**）。
+
+### 本次补充（LLM provider 抽象第一阶段：统一入口 + 可切换）
+
+- **配置收口**：新增 `src/llm/config.py`，统一读取 `LLM_PROVIDER`、`OLLAMA_*`、`ZHIPU_*`、`LLM_TIMEOUT_SEC`，避免在多个模块分散 `os.getenv`。
+- **接口抽象**：新增 `src/llm/types.py`（`LLMClient` Protocol），统一约定 `chat_simple/chat_streaming/plan/nl_to_command` 四类能力。
+- **工厂与适配器**：新增 `src/llm/llm_factory.py`，通过 `get_llm_client()` 返回 `OllamaClientAdapter` / `ZhipuClientAdapter`；本地验证已能按 `.env` 切到 `ZhipuClientAdapter`。
+- **路由解耦**：`src/routers/chat.py` 与 `src/routers/agent.py` 已改为调用 `llm_client`，不再直接依赖 `plan_with_ollama` 与 `chat_streaming` 模块函数。
+- **统一导出**：`src/llm/__init__.py` 改为只导出 `get_llm_client`，去掉 import 时 provider 分支，降低初始化耦合。
+- **测试同步修复并通过**：测试 patch 目标从模块函数改为 `llm_client` 对象方法；`python -m pytest -q` 全量 **29 passed**。
+
+### 本次补充（纯 JSON planner 接入：`agent/nl-run` + `chat/stream`）
+
+- **规划层落地**：新增并使用 `src/llm/agent_plan.py`，采用纯 JSON 协议输出 `kind=mcp/builtin/chat`，并通过 `parse + validate` 做强校验，避免模型输出直接落执行层。
+- **`POST /agent/nl-run` 已改造**：保留显式 `mcp ...` 直达解析；默认路径改为 `plan_with_ollama` + 动态 MCP 工具列表（`list_tools`），不再依赖固定关键词分流。
+- **`POST /chat/stream` 已改造**：流式同样复用 planner 决策，统一支持 `mcp / builtin / chat` 三类分支，并保留 `error/done` 事件约定。
+- **MCP 能力扩充**：`demo_server` 已新增 `echo(text: str)` 用于验证参数端到端传递；`parse_kv_args` 文档说明与“重复参数报错”策略已对齐。
+- **测试补齐并通过**：新增 `tests/test_agent_plan.py`、`tests/test_agent_plan_ollama.py`、`tests/test_chat_stream_plan.py`；并维护 `tests/test_chat_stream_mcp.py`、`tests/test_nl_run_api.py` 兼容新路由逻辑。
+- **全量回归**：`python -m pytest -q` 已通过（**28 passed**）。
 
 ### 本次补充（后端服务化整理：移除 CLI 心智，按路由拆分）
 
@@ -200,12 +323,13 @@
 1. **前端（按需）**：**`myproject/frontend`** —— 继续 **阶段 3**（`http.ts` 错误分类、各 Query 错误态）；布局上已分 **左栏（Agent / 历史 / 任务）** 与 **右栏 `ChatPanel`**，待后端 **SSE** 后接流式 UI。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
 2. **后端（与「产品/架构共识」对齐）**
-   - **流式聊天**：扩展 **`POST /chat`**（或新路由）返回 **SSE**（或 WebSocket），事件类型含 **文本 delta、工具起止、结束/错误**；与 **`turn_id`** 对齐。
-   - **统一操作记录**：在现有 **`agent_steps`**（或扩展表/字段）上区分 **`chat` / `task` / `tool` 等**，供 **`GET /agent/steps` 或新列表接口** 与左栏时间线消费；注意 **分页**。
-   - **分级路由（渐进）**：`route` → 各子处理器；一级输出 **结构化**；与 **`run_tool`** 白名单、确认策略一致。
+   - **支线优先（文档助手）**：按 readme **「支线：后端会话式文档生成」** 第 1 步：**新建数据库表 + SQLAlchemy 模型 + Alembic 迁移**（`doc_sessions` + `doc_session_messages`）；再在 `src/api.py` 挂载空路由占位。
+   - **`GET /events`**：已支持 **`page` / `limit` / `total`** 与 **`type` / `command` / `status`** 筛选（详见 **最近一次学习 2026-05-02**）。
+   - **统一操作记录**：继续用 **`events`** 或扩展 **`agent_steps`** 与左栏时间线对齐；注意 **分页**。
+   - **分级路由（渐进）**：一级结构化路由 + 二级专职处理器；与 **`run_tool` / MCP 白名单** 的安全策略保持一致。
    - **阶段 7**：**`docker compose`** 已可 **`db` + `api`**；换设备见 **「最近一次学习 → 阶段 7 收口」**。
-   - **pytest 可选**：流式契约测试（mock LLM）；**`/chat`** 用 `skipif`/mock；**`TEST_DATABASE_URL`**。
-   - **阶段 9 鉴权**：对外暴露流式与工具前优先评估。
+   - **pytest**：文档助手链路稳定后补 **`TestClient`**；按需 **`TEST_DATABASE_URL`**。
+   - **阶段 9 鉴权**：下载文档、多轮会话对外前优先评估。
 
 3. **查阅**
    - 本节上方 **「产品/架构共识（2026-04-09）」**

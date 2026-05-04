@@ -5,6 +5,20 @@ from src.mcp import MCPClient
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
+
+def _mcp_fail(
+    msg: str, tool_name: str = "", detail: str = "", allowed: list[str] | None = None
+):
+    data = {"route": "mcp"}
+    if tool_name:
+        data["tool_name"] = tool_name
+    if detail:
+        data["detail"] = detail
+    if allowed is not None:
+        data["allowed"] = allowed
+    return fail(msg, data)
+
+
 mcp_client = MCPClient()
 
 
@@ -33,12 +47,14 @@ def mcp_call(body: dict):
     args = body.get("args", {})
 
     if not tool_name:
-        return fail("tool_name 不能为空")
+        return _mcp_fail("tool_name 不能为空")
     if not isinstance(args, dict):
-        return fail("args 必须是对象")
+        return _mcp_fail("args 必须是对象", tool_name=tool_name)
     allowed = mcp_client.allowed_tool_names()
     if tool_name not in allowed:
-        return fail("不允许调用该 MCP 工具", {"allowed": sorted(allowed)})
+        return _mcp_fail(
+            "不允许调用该 MCP 工具", tool_name=tool_name, allowed=sorted(allowed)
+        )
 
     try:
         result = mcp_client.call_tool(tool_name, args)
@@ -46,4 +62,4 @@ def mcp_call(body: dict):
             return ok("ok", result.get("data"))
         return fail(result.get("msg", "调用失败"), result.get("data"))
     except Exception as e:
-        return fail(f"MCP 调用异常： {e}")
+        return _mcp_fail("MCP 调用异常", tool_name=tool_name, detail=str(e))

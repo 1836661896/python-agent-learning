@@ -1,4 +1,5 @@
 import json
+import shlex
 from typing import Any
 
 
@@ -18,6 +19,65 @@ def match_mcp_tool(text: str) -> str | None:
         return tool or None
 
     return None
+
+
+def _coerce_value(text: str):
+    t = text.strip()
+
+    low = t.lower()
+    if low == "true":
+        return True
+
+    if low == "false":
+        return False
+
+    if low in ("none", "null"):
+        return None
+
+    # int
+    try:
+        return int(t)
+    except ValueError:
+        pass
+
+    # float
+    try:
+        return float(t)
+    except ValueError:
+        pass
+
+    return t
+
+
+def parse_kv_args(payload: str) -> dict[str, Any]:
+    """
+    解析 key=value 参数串。
+    规则：
+    - 参数以空格分隔，支持引号（由 shlex.split 处理）
+    - 每个参数必须是 key=value
+    - 重复 key 时报错（避免静默覆盖）
+    """
+    t = payload.strip()
+    if not t:
+        return {}
+
+    try:
+        parts = shlex.split(t)
+    except ValueError:
+        raise ValueError("参数引号格式错误：请检查单双引号是否成对出现")
+    result: dict[str, Any] = {}
+    for idx, part in enumerate(parts, 1):
+        if "=" not in part:
+            raise ValueError(f"第{idx}个参数格式错误：{part}（应为 key=value）")
+        key, value = part.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if not key:
+            raise ValueError(f"第{idx}个参数名不能为空")
+        if key in result:
+            raise ValueError(f"参数重复：{key}（请只传一次）")
+        result[key] = _coerce_value(value)
+    return result
 
 
 def parse_mcp_call(text: str) -> tuple[str, dict[str, Any]] | None:
@@ -58,4 +118,4 @@ def parse_mcp_call(text: str) -> tuple[str, dict[str, Any]] | None:
             raise ValueError("MCP args 必须是 JSON 对象（dict）")
         return tool_name, obj
 
-    raise ValueError("参数格式不支持：请使用 JSON，例如 mcp ping {}")
+    return tool_name, parse_kv_args(payload)
