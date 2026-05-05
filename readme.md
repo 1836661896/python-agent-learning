@@ -16,7 +16,7 @@
   - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks）
   - ✅ 前端 **阶段 2（组件拆分）** 已完成（`HealthHeader`、`AgentCommand`、`LastStep`、`StepList`、`TaskSection` 等，见 `frontend/readme.md`）。
   - 🔄 **前端下一步**：**阶段 3**（请求层与错误体验）；已与 **`POST /chat`**、**`POST /agent/nl-run`** 联调（见 **`frontend/readme.md`**）；后续配合后端 **流式 SSE** 扩展 `ChatPanel`。
-  - 🔄 **后端下一步**：**聊天流式 + 左侧统一时间线**（见下文「产品/架构共识」）；**`GET /events` 已支持筛选与分页**（见「最近一次学习」）；新增支线 **后端会话式文档助手**（多轮澄清 → 生成 docx，会话状态落库，见下文「支线：后端会话式文档生成」）；延续 **NL → 工具** 与白名单；**鉴权（阶段 9）**；按需 **`TEST_DATABASE_URL`**。
+  - 🔄 **后端下一步**：**记忆摘要精炼 `memory_summary`（`maybe_refine_memory`）**、环境变量 **`MEMORY_*`**；**`doc_sessions` 绑定通用 `conversation_id`** 并复用 `build_augmented_user_text`；可选 **`/agent/nl-run` 与会话记忆对齐**；**`GET /conversations/{id}/messages`** 供前端拉历史。左侧统一时间线仍以 **`GET /events`** + **`conversation_id`/`turn_id`** 联调（见「产品/架构共识」）。支线 **文档助手** 见下文；**鉴权（阶段 9）**；按需 **`TEST_DATABASE_URL`**。
 - **主要目标**：
   - 搭建 Agent 雏形（支持基础命令，历史阶段）✅
   - Web API（FastAPI）作为核心服务层（当前主线）✅
@@ -95,6 +95,20 @@
 3. **接入 LLM**（固定系统提示 + JSON 协议 + 校验）。
 4. **`python-docx` 生成与下载**，路径与权限配置（`.env`）。
 5. **events 打点 + pytest**，前端最后接 API。
+
+---
+
+## 最近一次学习（日期：2026-05-04）
+
+### 本次补充（通用会话记忆：`conversation` + `conversation_messages` + `/chat` / `/chat/stream`）
+
+- **库表与迁移**：`conversation`（摘要 `memory_summary`、`memory_updated_at`、`extra_json` 等）、`conversation_messages`（`conversation_id`、`role` 枚举 `MessageRole`、`content`、`turn_id`、`meta` JSONB）；Alembic 版本见 `alembic/versions/` 中带 `conversation` 的迁移。
+- **服务层**：`src/services/conversation_memory.py` — `ensure_conversation`（无 `conversation_id` 时新建并提交）、`build_augmented_user_text`（摘要 + 近期消息预算 + 当前用户句）、`append_message`。
+- **请求体**：`ChatRequest` 增加可选 **`conversation_id`**；响应 **`data.conversation_id`** 供前端续传。
+- **`POST /chat`（非流式）**：走 planner 前写入用户消息并 `commit`；**`plan` / `chat_simple` 使用 `augmented`**（含记忆包）；助手回复后写入 assistant 并 `commit`；**`events` payload** 含 **`conversation_id`、`turn_id`**（与 `request_id` 对齐）。
+- **`POST /chat/stream`（SSE）**：路由内 **`SessionLocal()`** 注入 `_event_stream(..., db)`，**`finally: db.close()`**；与 non-stream 相同的 **ensure → augmented → user → commit**；**`plan` / `chat_streaming` 使用 `augmented`**；流式结束后拼接全文写入 assistant；**`_record_stream_chat_event`** 支持 **`reply` 全文及 `conversation_id`、`turn_id`**。
+- **测试**：`tests/test_conversation_memory_chat.py`（mock DB + memory，断言降级路径用 `augmented`、流式拼接 `aabb` 等）；可与 curl 冒烟：`/chat` 与 `/chat/stream` 返回正常且库中有对应消息行。
+- **下一步编码**：实现 **`maybe_refine_memory`**（阈值触发，更新 `memory_summary`，精炼调用勿再走 `append_message`）；`.env.example` 增加 **`MEMORY_RECENT_TURNS` / `MEMORY_REFINE_THRESHOLD_MESSAGES`** 等；`doc_sessions` 挂 **`conversation_id`**。
 
 ---
 
@@ -323,12 +337,13 @@
 1. **前端（按需）**：**`myproject/frontend`** —— 继续 **阶段 3**（`http.ts` 错误分类、各 Query 错误态）；布局上已分 **左栏（Agent / 历史 / 任务）** 与 **右栏 `ChatPanel`**，待后端 **SSE** 后接流式 UI。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
 2. **后端（与「产品/架构共识」对齐）**
-   - **支线优先（文档助手）**：按 readme **「支线：后端会话式文档生成」** 第 1 步：**新建数据库表 + SQLAlchemy 模型 + Alembic 迁移**（`doc_sessions` + `doc_session_messages`）；再在 `src/api.py` 挂载空路由占位。
-   - **`GET /events`**：已支持 **`page` / `limit` / `total`** 与 **`type` / `command` / `status`** 筛选（详见 **最近一次学习 2026-05-02**）。
-   - **统一操作记录**：继续用 **`events`** 或扩展 **`agent_steps`** 与左栏时间线对齐；注意 **分页**。
+   - **会话记忆（进行中）**：**`conversation` / `conversation_messages` 与 `/chat`、`/chat/stream` 落库** 已完成（见 **最近一次学习 2026-05-04**）。接下来优先：**`maybe_refine_memory`**（更新 `memory_summary`，精炼勿走 `append_message`）、**`.env.example` 增加 `MEMORY_*`**、全量 **`pytest tests/`** 回归。
+   - **文档助手与通用会话衔接**：`doc_sessions` 挂 **`conversation_id`**，复用 **`build_augmented_user_text`**；未完成的 **`doc_sessions` / `doc_session_messages` 表与路由** 仍按 **「支线：后端会话式文档生成」** 推进。
+   - **`GET /events`**：已支持 **`page` / `limit` / `total`** 与 **`type` / `command` / `status`** 筛选（详见 **最近一次学习 2026-05-02**）；与 **`conversation_id` / `turn_id`** 联调左栏时间线。
+   - **可选**：**`/agent/nl-run` 与会话记忆对齐**；**`GET /conversations/{id}/messages`** 拉纯聊天历史。
    - **分级路由（渐进）**：一级结构化路由 + 二级专职处理器；与 **`run_tool` / MCP 白名单** 的安全策略保持一致。
    - **阶段 7**：**`docker compose`** 已可 **`db` + `api`**；换设备见 **「最近一次学习 → 阶段 7 收口」**。
-   - **pytest**：文档助手链路稳定后补 **`TestClient`**；按需 **`TEST_DATABASE_URL`**。
+   - **pytest**：新链路用 **`TestClient`** + mock；按需 **`TEST_DATABASE_URL`**。
    - **阶段 9 鉴权**：下载文档、多轮会话对外前优先评估。
 
 3. **查阅**

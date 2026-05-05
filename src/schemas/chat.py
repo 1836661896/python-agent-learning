@@ -7,6 +7,10 @@ class ChatRequest(BaseModel):
     """聊天请求体。"""
 
     message: str = Field(..., description="发给模型的内容")
+    conversation_id: int | None = Field(
+        default=None,
+        description="会话 ID：不传则服务端新建并在响应中返回",
+    )
 
     @field_validator("message")
     @classmethod

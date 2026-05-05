@@ -10,7 +10,7 @@ class LLMClient(Protocol):
         self,
         user_text: str,
         mcp_tools: list[dict[str, Any]],
-        allowed_bulitin_cmds: set[str],
+        allowed_builtin_cmds: set[str],
     ) -> dict[str, Any]: ...
 
     def nl_to_command(self, user_text: str) -> str: ...

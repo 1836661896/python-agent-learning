@@ -1,6 +1,7 @@
-from sqlalchemy.orm import Session
 from typing import Any
+
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from src.models.Conversation import Conversation
 from src.models.ConversationMessages import ConversationMessages, MessageRole
@@ -13,7 +14,9 @@ RECENT_MESSAGE_ROWS = 40
 RECENT_CHAR_BUDGET = 8000
 
 
-def ensure_conversation(db: Session, conversation_id: int | None, kind: str = CONV_KIND_CHAT) -> Conversation:
+def ensure_conversation(
+    db: Session, conversation_id: int | None, kind: str = CONV_KIND_CHAT
+) -> Conversation:
     """
     有 id：从数据库取会话，不存在则抛错（由路由层转成「会话不存在」）。
     无 id：新建一条会话并提交，用于「首次对话不带头绪 id」。
@@ -31,24 +34,23 @@ def ensure_conversation(db: Session, conversation_id: int | None, kind: str = CO
 
 
 def append_message(
-    db: Session, 
-    conversation_id: int, 
-    role: MessageRole, 
-    content: str, 
-    turn_id: str, 
-    meta: dict[str, Any] | None = None
+    db: Session,
+    conversation_id: int,
+    role: MessageRole,
+    content: str,
+    turn_id: str,
+    meta: dict[str, Any] | None = None,
 ) -> ConversationMessages:
     row = ConversationMessages(
-        conversation_id = conversation_id,
-        role = role,
-        content = content,
-        turn_id = turn_id,
-        meta = meta if meta is not None else {}
+        conversation_id=conversation_id,
+        role=role,
+        content=content,
+        turn_id=turn_id,
+        meta=meta if meta is not None else {},
     )
     db.add(row)
     db.flush()
     return row
-
 
 
 def _role_label(role: MessageRole) -> str:
@@ -60,13 +62,16 @@ def _role_label(role: MessageRole) -> str:
         return "系统"
     return str(role)
 
-def build_augmented_user_text(db: Session, conv: Conversation, last_user_message: str) -> str:
+
+def build_augmented_user_text(
+    db: Session, conv: Conversation, last_user_message: str
+) -> str:
     """
     在尚未写入本轮用户消息之前调用：
     用已有摘要 + 已有消息行，拼成一段交给 chat_simple / streaming 的长文本。
     """
     summary = (conv.memory_summary or "").strip()
-    
+
     rows = (
         db.execute(
             select(ConversationMessages)

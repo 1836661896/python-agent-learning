@@ -12,6 +12,7 @@ from src.db.deps import get_db
 from src.llm import get_llm_client
 from src.llm.agent_plan import PlanError
 from src.mcp import MCPClient
+from src.models.step import AgentStep
 from src.routers.nl_utils import (
     ALLOWED_BUILTIN_CMDS,
     build_mcp_event_payload,
@@ -19,7 +20,6 @@ from src.routers.nl_utils import (
     is_allowed_nl_command,
     parse_manual_mcp_or_none,
 )
-from src.models.step import AgentStep
 from src.schemas import AgentNlRunRequest, AgentRunRequest
 from src.services.event_services import record_event
 from src.utils.datetime_fmt import format_step_ts_utc

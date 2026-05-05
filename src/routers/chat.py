@@ -4,14 +4,18 @@ from collections.abc import Generator
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
 from src.agent_service import run_tool
 from src.api_response import fail, ok
+from src.db.deps import get_db
+from src.db.session import SessionLocal
 from src.llm import get_llm_client
 from src.llm.agent_plan import PlanError
 from src.mcp import MCPClient
+from src.models.ConversationMessages import MessageRole
 from src.routers.nl_utils import (
     ALLOWED_BUILTIN_CMDS,
     build_builtin_event_payload,
@@ -20,6 +24,11 @@ from src.routers.nl_utils import (
     parse_manual_mcp_or_none,
 )
 from src.schemas import ChatRequest
+from src.services.conversation_memory import (
+    append_message,
+    build_augmented_user_text,
+    ensure_conversation,
+)
 from src.services.event_services import record_event
 from src.utils.obs_log import log_done, new_request_id
 
@@ -64,7 +73,9 @@ def _over_chat() -> str:
     return _sse_data({"type": "done"})
 
 
-def _unwrap_plan_result(plan_result: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _unwrap_plan_result(
+    plan_result: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """统一拆包 planner 返回：{'plan': ..., 'meta': ...}。"""
     plan = plan_result["plan"]
     plan_meta = plan_result.get("meta", {})
@@ -180,7 +191,9 @@ def _stream_done_extra_for_mcp(mcp_exec: dict[str, Any]) -> dict[str, str]:
     """统一 mcp 失败日志字段，避免手动/plan 两条路径重复拼装。"""
     return {
         "error_type": mcp_exec.get("error_type", "mcp_run_failed"),
-        "error_msg": str(mcp_exec.get("detail") or mcp_exec.get("allowed") or "mcp failed"),
+        "error_msg": str(
+            mcp_exec.get("detail") or mcp_exec.get("allowed") or "mcp failed"
+        ),
     }
 
 
@@ -223,21 +236,31 @@ def _record_stream_chat_event(
     message: str,
     plan_meta: dict[str, Any] | None,
     summary: str,
+    *,
+    reply: str = "",
+    conversation_id: int | None = None,
+    turn_id: str | None = None,
 ) -> None:
-    """流式 chat 事件统一入口：不在这里聚合完整 reply，避免引入额外状态复杂度。"""
+    """流式 chat 事件：payload 带完整 reply 与 conversation 信息。"""
+    payload: dict[str, Any] = {
+        "route": "chat",
+        "message": message,
+        "reply": reply,
+        "planner_meta": plan_meta,
+    }
+    if conversation_id is not None:
+        payload["conversation_id"] = conversation_id
+    if turn_id is not None:
+        payload["turn_id"] = turn_id
+
     _record_chat_event(
         type_="chat",
         request_id=request_id,
         ok_flag=True,
         summary=summary,
-        payload={
-            "route": "chat",
-            "message": message,
-            "reply": "",
-            "planner_meta": plan_meta,
-        },
-        plan_meta=plan_meta,
+        payload=payload,
         endpoint="/chat/stream",
+        plan_meta=plan_meta,
     )
 
 
@@ -416,7 +439,7 @@ def _handle_mcp_non_stream(
 
 
 @router.post("/chat")
-def chat(body: ChatRequest):
+def chat(body: ChatRequest, db: Session = Depends(get_db)):
     """非流式聊天：复用 planner 决策，返回文本 + planner_meta。"""
     request_id = new_request_id()
 
@@ -455,18 +478,55 @@ def chat(body: ChatRequest):
         if parsed:
             tool_name, args = parsed
             manual_meta = {"provider_used": "manual_mcp", "fallback_used": False}
-            return _handle_mcp_non_stream(tool_name, args, manual_meta, _done, request_id)
+            return _handle_mcp_non_stream(
+                tool_name, args, manual_meta, _done, request_id
+            )
 
-        # 2) 默认走 planner
+        # 2) 默认走 planner (会话 + 记忆包)
+        turn_id = request_id
+        try:
+            conv = ensure_conversation(db, body.conversation_id)
+        except ValueError:
+            _done(
+                "conversation_not_found",
+                False,
+                extra={"error_type": "conversation_not_found"},
+            )
+            return fail("会话不存在", {"route": "chat"})
+
+        augmented = build_augmented_user_text(db, conv, body.message)
+        append_message(
+            db,
+            conv.id,
+            MessageRole.user,
+            body.message,
+            turn_id,
+            meta={"request_id": request_id},
+        )
+        db.commit()
+
         try:
             mcp_tools = mcp_client.list_tools()
             plan_result = llm_client.plan(
-                user_text=body.message,
+                user_text=augmented,
                 mcp_tools=mcp_tools,
                 allowed_builtin_cmds=ALLOWED_BUILTIN_CMDS,
             )
         except PlanError:
-            reply = llm_client.chat_simple(body.message)
+            reply = llm_client.chat_simple(augmented)
+            append_message(
+                db,
+                conv.id,
+                MessageRole.assistant,
+                reply,
+                turn_id,
+                meta={
+                    "request_id": request_id,
+                    "route": "chat",
+                    "planner_meta": FALLBACK_CHAT_META,
+                },
+            )
+            db.commit()
             _done("chat", True, FALLBACK_CHAT_META)
             _record_chat_event(
                 type_="chat",
@@ -478,13 +538,20 @@ def chat(body: ChatRequest):
                     "message": body.message,
                     "reply": reply,
                     "planner_meta": FALLBACK_CHAT_META,
+                    "conversation_id": conv.id,
+                    "turn_id": turn_id,
                 },
                 plan_meta=FALLBACK_CHAT_META,
                 endpoint="/chat",
             )
             return ok(
                 "ok",
-                {"route": "chat", "text": reply, "planner_meta": FALLBACK_CHAT_META},
+                {
+                    "route": "chat",
+                    "text": reply,
+                    "planner_meta": FALLBACK_CHAT_META,
+                    "conversation_id": conv.id,
+                },
             )
 
         plan, plan_meta = _unwrap_plan_result(plan_result)
@@ -500,7 +567,20 @@ def chat(body: ChatRequest):
             )
 
         # kind == chat
-        reply = llm_client.chat_simple(body.message)
+        reply = llm_client.chat_simple(augmented)
+        append_message(
+            db,
+            conv.id,
+            MessageRole.assistant,
+            reply,
+            turn_id,
+            meta={
+                "request_id": request_id,
+                "route": "chat",
+                "planner_meta": plan_meta,
+            },
+        )
+        db.commit()
         _done("chat", True, plan_meta)
         _record_chat_event(
             type_="chat",
@@ -512,28 +592,46 @@ def chat(body: ChatRequest):
                 "message": body.message,
                 "reply": reply,
                 "planner_meta": plan_meta,
+                "conversation_id": conv.id,
+                "turn_id": turn_id,
             },
             plan_meta=plan_meta,
             endpoint="/chat",
         )
-        return ok("ok", {"route": "chat", "text": reply, "planner_meta": plan_meta})
+        return ok(
+            "ok",
+            {
+                "route": "chat",
+                "text": reply,
+                "planner_meta": plan_meta,
+                "conversation_id": conv.id,
+            },
+        )
 
     except httpx.HTTPStatusError as e:
         _done("llm_http_error", False, error=e)
+        db.rollback()
         return fail(f"LLM 返回异常：HTTP {e.response.status_code}")
     except httpx.RequestError as e:
         _done("llm_request_error", False, error=e)
+        db.rollback()
         return fail("无法连接 LLM 服务，请检查配置与网络")
     except Exception as e:
         _done("runtime_error", False, error=e)
+        db.rollback()
         return fail(str(e))
 
 
-def _event_stream(message: str, request_id: str):
+def _event_stream(
+    body: ChatRequest,
+    request_id: str,
+    db: Session,
+) -> Generator[str, None, None]:
     """
-    SSE 生成器：根据意图走 mcp / builtin / chat。
-    输出事件类型：delta / tool_result / done / error
+    SSE: 根据意图走 mcp / builtin / chat 。
+    在走 planner 前写入会话与用户消息：流式结束后写入助手消息并记事件。
     """
+    message = body.message
 
     def _s_done(
         route_kind: str,
@@ -555,17 +653,16 @@ def _event_stream(message: str, request_id: str):
             extra=extra,
         )
 
-    # start
-    log_done(
-        logger,
-        event="chat_stream_start",
-        endpoint="/chat/stream",
-        request_id=request_id,
-        route_kind="start",
-        ok=True,
-    )
-
     try:
+        log_done(
+            logger,
+            event="chat_stream_start",
+            endpoint="/chat/stream",
+            request_id=request_id,
+            route_kind="start",
+            ok=True,
+        )
+
         parsed, mcp_err = parse_manual_mcp_or_none(message)
         if mcp_err is not None:
             _s_done(
@@ -578,13 +675,14 @@ def _event_stream(message: str, request_id: str):
             yield _over_chat()
             return
 
-        # 1) 手动 mcp
         if parsed:
             tool_name, args = parsed
             manual_meta = {"provider_used": "manual_mcp", "fallback_used": False}
             mcp_exec = yield from _stream_mcp_tool(tool_name, args, manual_meta)
 
-            ok_flag = _record_stream_mcp_event(request_id, tool_name, manual_meta, mcp_exec)
+            ok_flag = _record_stream_mcp_event(
+                request_id, tool_name, manual_meta, mcp_exec
+            )
             _s_done(
                 "mcp",
                 ok_flag,
@@ -593,37 +691,82 @@ def _event_stream(message: str, request_id: str):
             )
             return
 
-        # 2) planner
+        # planner 前：会话 + 用户信息 + 记忆包
+        turn_id = request_id
+        try:
+            conv = ensure_conversation(db, body.conversation_id)
+        except ValueError:
+            _s_done(
+                "conversation_not_found",
+                False,
+                extra={"error_type": "conversation_not_found"},
+            )
+            yield _sse_data({"type": "error", "msg": "会话不存在", "route": "chat"})
+            yield _over_chat()
+            return
+
+        augmented = build_augmented_user_text(db, conv, message)
+        append_message(
+            db,
+            conv.id,
+            MessageRole.user,
+            message,
+            turn_id,
+            meta={"request_id": request_id},
+        )
+        db.commit()
+
         try:
             mcp_tools = mcp_client.list_tools()
             plan_result = llm_client.plan(
-                user_text=message,
+                user_text=augmented,
                 mcp_tools=mcp_tools,
                 allowed_builtin_cmds=ALLOWED_BUILTIN_CMDS,
             )
         except PlanError:
-            # planner 失败：降级纯聊天流
-            for chunk in llm_client.chat_streaming(message):
+            parts: list[str] = []
+            for chunk in llm_client.chat_streaming(augmented):
+                parts.append(chunk)
                 yield _sse_data({"type": "delta", "text": chunk})
-
+            full_reply = "".join(parts)
+            append_message(
+                db,
+                conv.id,
+                MessageRole.assistant,
+                full_reply,
+                turn_id,
+                meta={
+                    "request_id": request_id,
+                    "route": "chat",
+                    "planner_meta": FALLBACK_CHAT_META,
+                },
+            )
+            db.commit()
             _s_done("chat", True, FALLBACK_CHAT_META)
             _record_stream_chat_event(
                 request_id=request_id,
                 message=message,
                 plan_meta=FALLBACK_CHAT_META,
                 summary="planner fallback chat",
+                reply=full_reply,
+                conversation_id=conv.id,
+                turn_id=turn_id,
             )
             yield _over_chat()
             return
 
         plan, plan_meta = _unwrap_plan_result(plan_result)
 
-        # 3) planner -> mcp
         if plan["kind"] == "mcp":
             tool_name = plan["tool_name"]
-            mcp_exec = yield from _stream_mcp_tool(tool_name, plan["arguments"], plan_meta)
+            mcp_exec = yield from _stream_mcp_tool(
+                tool_name, plan["arguments"], plan_meta
+            )
 
-            ok_flag = _record_stream_mcp_event(request_id, tool_name, plan_meta, mcp_exec)
+            ok_flag = _record_stream_mcp_event(
+                request_id, tool_name, plan_meta, mcp_exec
+            )
+
             _s_done(
                 "mcp",
                 ok_flag,
@@ -632,7 +775,6 @@ def _event_stream(message: str, request_id: str):
             )
             return
 
-        # 4) planner -> builtin
         if plan["kind"] == "builtin":
             cmd = plan["command"]
 
@@ -705,38 +847,60 @@ def _event_stream(message: str, request_id: str):
             yield _over_chat()
             return
 
-        # 5) planner -> chat
-        for chunk in llm_client.chat_streaming(message):
+        parts2: list[str] = []
+        for chunk in llm_client.chat_streaming(augmented):
+            parts2.append(chunk)
             yield _sse_data({"type": "delta", "text": chunk})
-
+        full_reply2 = "".join(parts2)
+        append_message(
+            db,
+            conv.id,
+            MessageRole.assistant,
+            full_reply2,
+            turn_id,
+            meta={"request_id": request_id, "route": "chat", "planner_meta": plan_meta},
+        )
+        db.commit()
         _s_done("chat", True, plan_meta)
         _record_stream_chat_event(
             request_id=request_id,
             message=message,
             plan_meta=plan_meta,
             summary="chat stream reply",
+            reply=full_reply2,
+            conversation_id=conv.id,
+            turn_id=turn_id,
         )
         yield _over_chat()
 
     except httpx.HTTPStatusError as e:
         _s_done("llm_http_error", False, error=e)
+        db.rollback()
         yield _sse_data(
             {"type": "error", "msg": f"LLM 返回异常： HTTP {e.response.status_code}"}
         )
+        yield _over_chat()
     except httpx.RequestError as e:
         _s_done("llm_request_error", False, error=e)
+        db.rollback()
         yield _sse_data({"type": "error", "msg": "无法连接 LLM，请检查配置与网络"})
+        yield _over_chat()
     except Exception as e:
         _s_done("runtime_error", False, error=e)
+        db.rollback()
         yield _sse_data({"type": "error", "msg": str(e)})
+        yield _over_chat()
+    finally:
+        db.close()
 
 
 @router.post("/chat/stream")
 def chat_with_stream(body: ChatRequest):
-    """SSE：多行 data: JSON；type 为 delta / done / error。"""
+    """SSE：多行 data：JSON；type 为 delta / done / error。"""
     request_id = new_request_id()
+    db = SessionLocal()
     return StreamingResponse(
-        _event_stream(body.message, request_id),
+        _event_stream(body, request_id, db),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
