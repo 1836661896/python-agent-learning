@@ -98,6 +98,18 @@
 
 ---
 
+## 最近一次学习（日期：2026-05-06）
+
+### 本次补充（`src/routers/chat/` 包拆分与逻辑精简）
+
+- **目录结构**：原单文件 **`src/routers/chat.py`** 已拆为包 **`src/routers/chat/`**：**`router.py`** 仅注册 `POST /chat` 与 `POST /chat/stream`；**`logic.py`** 承载 `chat_endpoint`、`event_stream`（SSE）及 `_handle_*`、`_record_*` 等实现；**`__init__.py`** 导出 `router`、`llm_client`、`mcp_client`、`PlanError`，并 re-export **`record_event` / `run_tool` / `append_message` / `build_augmented_user_text` / `ensure_conversation`**，便于测试里 **`import src.routers.chat as chat_module`** 时 monkeypatch。
+- **调用约定**：逻辑层通过 **`_chat_pkg()`** 将上述依赖转发到包命名空间，行为与旧单文件模块一致。
+- **精简点**：非流式 MCP 失败使用 **`nl_utils.build_mcp_fail_data`**；builtin 拒绝文案统一 **`_builtin_rejected_message`**；**`_yield_sse_chat_stream`** 合并 PlanError 降级与普通 chat 的流式循环；**`_make_request_done_logger`** 统一非流式/流式 `log_done`；**`_prepare_planner_user_turn`** 抽取「会话校验 + 用户消息 + `augmented`」。
+- **路由聚合**：**`src/routers/__init__.py`** 仍为 **`from .chat import router`**，对外 URL 不变。
+- **回归**：聊天相关用例在 **DB / LLM** 配置齐全时可跑：`python -m pytest -q tests/test_chat_api.py tests/test_chat_stream_plan.py tests/test_chat_stream_mcp.py tests/test_conversation_memory_chat.py`。
+
+---
+
 ## 最近一次学习（日期：2026-05-04）
 
 ### 本次补充（通用会话记忆：`conversation` + `conversation_messages` + `/chat` / `/chat/stream`）
@@ -106,7 +118,7 @@
 - **服务层**：`src/services/conversation_memory.py` — `ensure_conversation`（无 `conversation_id` 时新建并提交）、`build_augmented_user_text`（摘要 + 近期消息预算 + 当前用户句）、`append_message`。
 - **请求体**：`ChatRequest` 增加可选 **`conversation_id`**；响应 **`data.conversation_id`** 供前端续传。
 - **`POST /chat`（非流式）**：走 planner 前写入用户消息并 `commit`；**`plan` / `chat_simple` 使用 `augmented`**（含记忆包）；助手回复后写入 assistant 并 `commit`；**`events` payload** 含 **`conversation_id`、`turn_id`**（与 `request_id` 对齐）。
-- **`POST /chat/stream`（SSE）**：路由内 **`SessionLocal()`** 注入 `_event_stream(..., db)`，**`finally: db.close()`**；与 non-stream 相同的 **ensure → augmented → user → commit**；**`plan` / `chat_streaming` 使用 `augmented`**；流式结束后拼接全文写入 assistant；**`_record_stream_chat_event`** 支持 **`reply` 全文及 `conversation_id`、`turn_id`**。
+- **`POST /chat/stream`（SSE）**：路由内 **`SessionLocal()`** 注入 **`event_stream(..., db)`**（实现位于 **`src/routers/chat/logic.py`**），**`finally: db.close()`**；与 non-stream 相同的 **ensure → augmented → user → commit**；**`plan` / `chat_streaming` 使用 `augmented`**；流式结束后拼接全文写入 assistant；**`_record_stream_chat_event`** 支持 **`reply` 全文及 `conversation_id`、`turn_id`**。
 - **测试**：`tests/test_conversation_memory_chat.py`（mock DB + memory，断言降级路径用 `augmented`、流式拼接 `aabb` 等）；可与 curl 冒烟：`/chat` 与 `/chat/stream` 返回正常且库中有对应消息行。
 - **下一步编码**：实现 **`maybe_refine_memory`**（阈值触发，更新 `memory_summary`，精炼调用勿再走 `append_message`）；`.env.example` 增加 **`MEMORY_RECENT_TURNS` / `MEMORY_REFINE_THRESHOLD_MESSAGES`** 等；`doc_sessions` 挂 **`conversation_id`**。
 
@@ -139,17 +151,17 @@
   - `python -m pytest -q tests/test_chat_stream_mcp.py -k "run_failed_records_event"` → `1 passed`
   - `python -m pytest -q tests/test_chat_api.py tests/test_chat_stream_plan.py tests/test_chat_stream_mcp.py` → **`12 passed`**
 
-### 本次补充（`chat.py` 全链路整理：流式/非流式事件统一 + 冗余收口）
+### 本次补充（chat 路由全链路整理：流式/非流式事件统一 + 冗余收口）
 
-- **可观测性对齐**：`src/routers/chat.py` 的事件记录已统一收口到 `_record_chat_event`，并支持按 `endpoint` 区分 `/chat` 与 `/chat/stream`，避免流式与非流式事件混淆。
+- **可观测性对齐**：**`src/routers/chat/`**（**`logic.py`**）内事件记录已统一收口到 `_record_chat_event`，并支持按 `endpoint` 区分 `/chat` 与 `/chat/stream`，避免流式与非流式事件混淆。
 - **语义修正**：`PlanError -> fallback chat` 的 `fallback_used` 统一为 `True`（非流式 + 流式一致），与“确实发生降级”语义对齐；对应测试断言已同步更新。
 - **流式事件补齐**：`/chat/stream` 下 `manual mcp`、`planner -> mcp`、`planner -> builtin`、`planner -> chat`、`planner fallback chat` 均已补齐事件落库，包含 `request_id/provider_used/fallback_used/planner_meta` 等关键字段。
-- **代码整理**：新增并复用若干 helper（如 `mcp/builtin payload` 组装、流式 mcp 事件记录等），减少 `chat.py` 内重复分支代码，主流程更易读、后续更易扩展。
+- **代码整理**：新增并复用若干 helper（如 `mcp/builtin payload` 组装、流式 mcp 事件记录等），减少 chat 路由内重复分支代码，主流程更易读、后续更易扩展。
 - **回归验证**：`python -m pytest -q tests/test_chat_api.py tests/test_chat_stream_plan.py tests/test_chat_stream_mcp.py` 通过（**10 passed**）。
 
 ### 本次补充（`/chat` 事件补齐与防回归测试）
 
-- **事件补齐（非流式）**：`src/routers/chat.py` 已补齐两处落库：
+- **事件补齐（非流式）**：**`src/routers/chat/`**（**`logic.py`**）已补齐两处落库：
   - `PlanError -> fallback chat` 分支新增 `chat` 事件（`summary="planner fallback chat"`）。
   - `builtin` 执行失败分支新增 `builtin failed` 事件（含 `error_type="builtin_run_failed"`）。
 - **字段一致性**：新增事件均带 `request_id`、`provider_used`、`fallback_used`、`payload.planner_meta`，与现有 `mcp/chat/builtin success` 记录结构保持一致，便于前端统一时间线展示。
@@ -158,17 +170,17 @@
   - builtin 执行失败时的事件记录。
 - **本地验证**：`python -m pytest -q tests/test_chat_api.py -k "fallback or builtin_fail"` 通过（**2 passed, 2 deselected**）。
 
-### 本次补充（非流式 `/chat` 统一到 planner 链路 + `chat.py` 小重构）
+### 本次补充（非流式 `/chat` 统一到 planner 链路 + chat 模块小重构）
 
 - **非流式路由统一**：`POST /chat` 已从“直接 `chat_simple`”升级为复用同一 planner 决策链路（与 `POST /chat/stream`、`POST /agent/nl-run` 对齐），统一支持 `mcp / builtin / chat` 三类分支。
 - **`planner_meta` 透传补齐**：非流式 `POST /chat` 返回体已补齐 `planner_meta`，与流式 `tool_result`、`/agent/nl-run` 一致，前端可统一消费 provider/fallback 信息。
-- **重构（不改行为）**：`src/routers/chat.py` 抽出 `_unwrap_plan_result`、`_handle_builtin_non_stream`、`_handle_mcp_non_stream`，降低 `chat()` 主流程复杂度，便于后续维护与测试。
+- **重构（不改行为）**：**`src/routers/chat/`** 抽出 `_unwrap_plan_result`、`_handle_builtin_non_stream`、`_handle_mcp_non_stream`，降低非流式入口主流程复杂度，便于后续维护与测试。
 - **测试新增与回归**：新增 `tests/test_chat_api.py` 覆盖非流式 planner 分支与 `planner_meta`；同步回归 `tests/test_chat_stream_plan.py`、`tests/test_nl_run_api.py`，全量 `python -m pytest -q` 通过（**35 passed**）。
 
 ### 本次补充（可观测性：结构化日志工具抽离 + chat/agent 日志封装）
 
 - **结构化日志工具**：新增 `src/utils/obs_log.py`（`new_request_id` + `log_event`），统一输出格式为 `event + JSON payload`，便于检索与排障。
-- **chat 日志封装**：`src/routers/chat.py` 新增 `_log_chat_success/_log_chat_error`，将 `request_id/endpoint/route_kind/provider_used/fallback_used/ok/error_type` 等字段统一收口，减少重复代码。
+- **chat 日志封装**：chat 路由模块新增 `_log_chat_success/_log_chat_error`，将 `request_id/endpoint/route_kind/provider_used/fallback_used/ok/error_type` 等字段统一收口，减少重复代码。
 - **agent 日志封装**：`src/routers/agent.py` 新增 `_log_agent_success/_log_agent_error` 并在 `/agent/nl-run` 路径打点，字段与 chat 对齐，后续可统一查询。
 - **测试断言增强**：`tests/test_chat_api.py`、`tests/test_nl_run_api.py` 增加对 `planner_meta.provider_used/fallback_used` 的断言，防止字段回归丢失。
 
@@ -186,7 +198,7 @@
 - **配置收口**：新增 `src/llm/config.py`，统一读取 `LLM_PROVIDER`、`OLLAMA_*`、`ZHIPU_*`、`LLM_TIMEOUT_SEC`，避免在多个模块分散 `os.getenv`。
 - **接口抽象**：新增 `src/llm/types.py`（`LLMClient` Protocol），统一约定 `chat_simple/chat_streaming/plan/nl_to_command` 四类能力。
 - **工厂与适配器**：新增 `src/llm/llm_factory.py`，通过 `get_llm_client()` 返回 `OllamaClientAdapter` / `ZhipuClientAdapter`；本地验证已能按 `.env` 切到 `ZhipuClientAdapter`。
-- **路由解耦**：`src/routers/chat.py` 与 `src/routers/agent.py` 已改为调用 `llm_client`，不再直接依赖 `plan_with_ollama` 与 `chat_streaming` 模块函数。
+- **路由解耦**：**`src/routers/chat/`** 与 **`src/routers/agent.py`** 已改为调用 `llm_client`，不再直接依赖 `plan_with_ollama` 与 `chat_streaming` 模块函数。
 - **统一导出**：`src/llm/__init__.py` 改为只导出 `get_llm_client`，去掉 import 时 provider 分支，降低初始化耦合。
 - **测试同步修复并通过**：测试 patch 目标从模块函数改为 `llm_client` 对象方法；`python -m pytest -q` 全量 **29 passed**。
 
@@ -205,7 +217,7 @@
 - **API 分层**：`src/api.py` 已从“大一统文件”调整为应用装配层；业务路由拆分到：
   - `src/routers/tasks.py`
   - `src/routers/agent.py`
-  - `src/routers/chat.py`
+  - `src/routers/chat/`（**`router.py`** 注册，`__init__.py` 导出 `router`）
 - **统一响应**：新增 `src/api_response.py`，集中维护 `ok/fail` 响应结构，避免重复代码。
 - **接口兼容性**：现有对前端开放的路径保持不变（`/health`、`/tasks`、`/agent/*`、`/chat`），前端调用无需改 URL。
 - **测试**：`pytest` 已通过（7 项），`test_nl_run_api.py` 的 monkeypatch 目标同步调整为 `src.routers.agent`。
@@ -337,7 +349,7 @@
 1. **前端（按需）**：**`myproject/frontend`** —— 继续 **阶段 3**（`http.ts` 错误分类、各 Query 错误态）；布局上已分 **左栏（Agent / 历史 / 任务）** 与 **右栏 `ChatPanel`**，待后端 **SSE** 后接流式 UI。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
 2. **后端（与「产品/架构共识」对齐）**
-   - **会话记忆（进行中）**：**`conversation` / `conversation_messages` 与 `/chat`、`/chat/stream` 落库** 已完成（见 **最近一次学习 2026-05-04**）。接下来优先：**`maybe_refine_memory`**（更新 `memory_summary`，精炼勿走 `append_message`）、**`.env.example` 增加 `MEMORY_*`**、全量 **`pytest tests/`** 回归。
+   - **会话记忆（进行中）**：**`conversation` / `conversation_messages` 与 `/chat`、`/chat/stream` 落库** 已完成（见 **2026-05-04**）；**chat 路由** 已拆为 **`src/routers/chat/`** 包并做冗余收口（见 **2026-05-06**）。实现入口：**`logic.py`**（`chat_endpoint` / `event_stream`）、**`router.py`**（注册路由）；测试仍 **`import src.routers.chat as chat_module`** 做 monkeypatch。接下来优先：**`maybe_refine_memory`**（更新 `memory_summary`，精炼勿走 `append_message`）、**`.env.example` 增加 `MEMORY_*`**、全量 **`pytest tests/`** 回归。
    - **文档助手与通用会话衔接**：`doc_sessions` 挂 **`conversation_id`**，复用 **`build_augmented_user_text`**；未完成的 **`doc_sessions` / `doc_session_messages` 表与路由** 仍按 **「支线：后端会话式文档生成」** 推进。
    - **`GET /events`**：已支持 **`page` / `limit` / `total`** 与 **`type` / `command` / `status`** 筛选（详见 **最近一次学习 2026-05-02**）；与 **`conversation_id` / `turn_id`** 联调左栏时间线。
    - **可选**：**`/agent/nl-run` 与会话记忆对齐**；**`GET /conversations/{id}/messages`** 拉纯聊天历史。
