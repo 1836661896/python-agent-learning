@@ -6,6 +6,7 @@ from src.services.conversation_memory import (
     append_message,
     build_augmented_user_text,
     ensure_conversation,
+    maybe_refine_memory,
 )
 from src.services.event_services import record_event
 
@@ -22,4 +23,5 @@ __all__ = [
     "append_message",
     "build_augmented_user_text",
     "ensure_conversation",
+    "maybe_refine_memory",
 ]

@@ -16,7 +16,7 @@
   - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks）
   - ✅ 前端 **阶段 2（组件拆分）** 已完成（`HealthHeader`、`AgentCommand`、`LastStep`、`StepList`、`TaskSection` 等，见 `frontend/readme.md`）。
   - 🔄 **前端下一步**：**阶段 3**（请求层与错误体验）；已与 **`POST /chat`**、**`POST /agent/nl-run`** 联调（见 **`frontend/readme.md`**）；后续配合后端 **流式 SSE** 扩展 `ChatPanel`。
-  - 🔄 **后端下一步**：**记忆摘要精炼 `memory_summary`（`maybe_refine_memory`）**、环境变量 **`MEMORY_*`**；**`doc_sessions` 绑定通用 `conversation_id`** 并复用 `build_augmented_user_text`；可选 **`/agent/nl-run` 与会话记忆对齐**；**`GET /conversations/{id}/messages`** 供前端拉历史。左侧统一时间线仍以 **`GET /events`** + **`conversation_id`/`turn_id`** 联调（见「产品/架构共识」）。支线 **文档助手** 见下文；**鉴权（阶段 9）**；按需 **`TEST_DATABASE_URL`**。
+  - 🔄 **后端下一步**：**记忆摘要精炼 `memory_summary`（`maybe_refine_memory`）**、环境变量 **`MEMORY_*`**；**`doc_sessions` 绑定通用 `conversation_id`** 并复用 `build_augmented_user_text`；可选 **`/agent/nl-run` 与会话记忆对齐**；**`POST /chat` 各分支统一返回 `conversation_id`（尤其 planner→MCP）** 与消息落库对齐。左侧统一时间线仍以 **`GET /events`** + **`conversation_id`/`turn_id`** 联调（见「产品/架构共识」）。支线 **文档助手** 见下文；**鉴权（阶段 9）**；按需 **`TEST_DATABASE_URL`**。
 - **主要目标**：
   - 搭建 Agent 雏形（支持基础命令，历史阶段）✅
   - Web API（FastAPI）作为核心服务层（当前主线）✅
@@ -98,6 +98,37 @@
 
 ---
 
+## 聊天与会话 API 备忘（2026-05-07）
+
+> 与实现一致；联调以代码为准。
+
+### 列表字段约定
+
+- **分页列表**：**`GET /events`** 与 **`GET /conversations/{id}/messages`** 的成功响应里，列表均使用 **`data.records`**，并含 **`page`、`limit`、`total`**。
+
+### `GET /conversations/{conversation_id}/messages`
+
+- **路由**：`src/routers/conversations.py`；**排序**：按消息主键 **升序**（从早到晚）。
+- **Query**：`page` 默认 `1`，范围 `1～100`；`limit` 默认 `10`，范围 `5～50`。
+- **成功**：`code == 0`，`data` 含 **`records`**（每条含 `id`、`conversation_id`、`role`、`content`、`turn_id`、`meta`、`created_at` 等）、**`page`**、**`limit`**、**`total`**。
+- **失败**：无该会话时 `code != 0`，`msg` 为「会话不存在」。
+
+### `POST /chat` 与 `conversation_id`
+
+- **`ChatRequest`** 可选 **`conversation_id`**；部分成功响应 **`data` 中含 `conversation_id`**，供续聊与 **`GET /conversations/.../messages`** 联调。
+- **当前实现注意**：走 **`route: chat`**（含 planner 失败后的 fallback）等路径时，响应里会带 **`conversation_id`**；**planner 判定为 MCP** 时，非流式 **`_handle_mcp_non_stream` 返回体可能尚未带 `conversation_id`**（与显式 MCP 入口同理，后续在 `logic.py` 对齐）。联调时请以实际 JSON 为准，或先用手动已知的 `conversation_id` 测历史接口。
+
+---
+
+## 最近一次学习（日期：2026-05-07）
+
+### 本次补充
+
+- **文档**：新增上文 **「聊天与会话 API 备忘」**（`GET /conversations/{id}/messages`、`data.records` 与 **`GET /events` 的 `records` 统一**、`POST /chat` 与 `conversation_id` 现状说明）；「后端下一步」中 **`GET /conversations/.../messages`** 已具备，改为强调 **`/chat` 分支与 `conversation_id` 对齐**。
+- **代码**：`src/routers/conversations.py` 中 **`fail` / `ok` 改为从 `src.api_response` 导入**，避免经 `src.api` 造成循环依赖。
+
+---
+
 ## 最近一次学习（日期：2026-05-06）
 
 ### 本次补充（`src/routers/chat/` 包拆分与逻辑精简）
@@ -129,7 +160,7 @@
 ### 本次补充（`GET /events` 时间线：筛选 + 分页）
 
 - **查询参数**：`page`（默认 1）、`limit`、`type`（URL 参数名；筛选列 **`events.type`**）、`command`（`payload.command` JSON 文本）、`status`（`all` / `success` / `failed` → `ok`）。
-- **响应**：`data.items` + `page`、`limit`、`total`（与筛选条件一致的 `COUNT`）。
+- **响应**：`data.records` + `page`、`limit`、`total`（与筛选条件一致的 `COUNT`）。
 - **实现位置**：`src/routers/events.py`。
 - **自测示例**：`curl -s "http://127.0.0.1:8000/events?limit=5" | python -m json.tool`。
 

@@ -532,9 +532,7 @@ def chat_endpoint(body: ChatRequest, db: Session):
 
         # 2) 默认走 planner (会话 + 记忆包)
         try:
-            conv, turn_id, augmented = _prepare_planner_user_turn(
-                db, body, request_id
-            )
+            conv, turn_id, augmented = _prepare_planner_user_turn(db, body, request_id)
         except ValueError:
             _done(
                 "conversation_not_found",
@@ -565,6 +563,7 @@ def chat_endpoint(body: ChatRequest, db: Session):
                 },
             )
             db.commit()
+            _chat_pkg().maybe_refine_memory(db, conv, llm_client)
             _done("chat", True, FALLBACK_CHAT_META)
             _record_chat_event(
                 type_="chat",
@@ -619,6 +618,7 @@ def chat_endpoint(body: ChatRequest, db: Session):
             },
         )
         db.commit()
+        _chat_pkg().maybe_refine_memory(db, conv, llm_client)
         _done("chat", True, plan_meta)
         _record_chat_event(
             type_="chat",
@@ -716,9 +716,7 @@ def event_stream(
 
         # planner 前：会话 + 用户信息 + 记忆包
         try:
-            conv, turn_id, augmented = _prepare_planner_user_turn(
-                db, body, request_id
-            )
+            conv, turn_id, augmented = _prepare_planner_user_turn(db, body, request_id)
         except ValueError:
             _s_done(
                 "conversation_not_found",
@@ -751,6 +749,7 @@ def event_stream(
                 },
             )
             db.commit()
+            _chat_pkg().maybe_refine_memory(db, conv, llm_client)
             _s_done("chat", True, FALLBACK_CHAT_META)
             _record_stream_chat_event(
                 request_id=request_id,
@@ -866,6 +865,7 @@ def event_stream(
             meta={"request_id": request_id, "route": "chat", "planner_meta": plan_meta},
         )
         db.commit()
+        _chat_pkg().maybe_refine_memory(db, conv, llm_client)
         _s_done("chat", True, plan_meta)
         _record_stream_chat_event(
             request_id=request_id,

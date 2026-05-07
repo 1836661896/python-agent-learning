@@ -158,7 +158,7 @@ def test_chat_api_builtin_rejected_records_event(client, monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["code"] == 1
-    assert "安全转成可执行命令" in body["msg"]
+    assert "无法把这句话安全的转成可执行命令" in body["msg"]
 
     assert captured["type_"] == "builtin"
     assert captured["endpoint"] == "/chat"

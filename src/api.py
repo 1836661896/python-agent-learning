@@ -13,6 +13,7 @@ from src.routers import (
     event_router,
     mcp_router,
     tasks_router,
+    conversations_router,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,3 +66,4 @@ app.include_router(chat_router)
 app.include_router(mcp_router)
 app.include_router(event_router)
 app.include_router(doc_sessions_router)
+app.include_router(conversations_router)

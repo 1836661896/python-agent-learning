@@ -55,7 +55,7 @@ def list_events(
 
     rows = db.execute(list_stmt).scalars().all()
 
-    items = [
+    records = [
         {
             "event_id": r.event_id,
             "type": r.type,
@@ -72,5 +72,5 @@ def list_events(
     ]
 
     return ok(
-        "查询成功", {"items": items, "page": page, "limit": limit, "total": total}
+        "查询成功", {"records": records, "page": page, "limit": limit, "total": total}
     )

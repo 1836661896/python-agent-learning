@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def _recent_message_rows():
+    """最近最多读多少条消息（从新往旧取再反转为时间顺序）"""
     raw = os.getenv("MEMORY_RECENT_MESSAGE_ROWS", "40")
     try:
         n = int(raw)
@@ -24,6 +25,7 @@ def _recent_message_rows():
 
 
 def _recent_char_budget():
+    """「最近对话」拼出来后总长上限，防止 prompt 太长"""
     raw = os.getenv("MEMORY_RECENT_CHAR_BUDGET", "8000")
     try:
         n = int(raw)
@@ -33,6 +35,7 @@ def _recent_char_budget():
 
 
 def _refine_threshold_messages():
+    """精炼触发阈值，每隔多少条消息触发一次精炼"""
     raw = os.getenv("MEMORY_REFINE_THRESHOLD_MESSAGES", "12")
     try:
         n = int(raw)
@@ -42,6 +45,7 @@ def _refine_threshold_messages():
 
 
 def _refine_context_messages():
+    """精炼上下文消息条数，不要太多"""
     raw = os.getenv("MEMORY_REFINE_CONTEXT_MESSAGES", "80")
     try:
         n = int(raw)
@@ -77,6 +81,7 @@ def append_message(
     turn_id: str,
     meta: dict[str, Any] | None = None,
 ) -> ConversationMessages:
+    """写入消息行，返回消息行对象"""
     row = ConversationMessages(
         conversation_id=conversation_id,
         role=role,
@@ -90,6 +95,7 @@ def append_message(
 
 
 def _role_label(role: MessageRole) -> str:
+    """消息行角色标签"""
     if role == MessageRole.user:
         return "用户"
     elif role == MessageRole.assistant:
@@ -104,6 +110,7 @@ def maybe_refine_memory(
     conv: Conversation,
     llm_client: Any,
 ) -> None:
+    """精炼会话记忆，每隔多少条消息触发一次精炼"""
     try:
         t = _refine_threshold_messages()
         if t <= 0:
@@ -201,3 +208,37 @@ def build_augmented_user_text(
         parts.append(f"【最近对话】\n{recent}")
     parts.append(f"【用户当前输入】\n{last_user_message.strip()}")
     return "\n\n".join(parts)
+
+
+def list_conversation_messages_paginated(
+    db: Session,
+    conversation_id: int,
+    *,
+    page: int = 1,
+    limit: int = 20,
+) -> tuple[list[ConversationMessages], int] | None:
+    conv = db.get(Conversation, conversation_id)
+    if conv is None:
+        return None
+    count_stmt = (
+        select(func.count())
+        .select_from(ConversationMessages)
+        .where(ConversationMessages.conversation_id == conversation_id)
+    )
+    total = db.scalar(count_stmt)
+    if total is None:
+        total = 0
+    total = int(total)
+
+    offset = (page - 1) * limit
+
+    list_stmt = (
+        select(ConversationMessages)
+        .where(ConversationMessages.conversation_id == conversation_id)
+        .order_by(ConversationMessages.id.asc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    rows = list(db.execute(list_stmt).scalars().all())
+    return rows, total
