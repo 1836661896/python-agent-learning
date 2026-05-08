@@ -126,7 +126,7 @@ def test_chat_api_builtin_fail_records_event(client, monkeypatch):
     assert captured["type_"] == "builtin"
     assert captured["endpoint"] == "/chat"
     assert captured["tool_succeeded"] is False
-    assert captured["summary"] == "builtin failed: time"
+    assert captured["summary"] == "builtin 执行失败: time"
     assert captured["provider_used"] == "ollama"
     assert captured["fallback_used"] is False
 

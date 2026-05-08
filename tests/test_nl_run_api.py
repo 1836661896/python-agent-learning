@@ -82,7 +82,7 @@ def test_nl_run_manual_mcp_not_allowed_records_event(client, monkeypatch):
     assert captured["type_"] == "mcp"
     assert captured["endpoint"] == "/agent/nl-run"
     assert captured["tool_succeeded"] is False
-    assert captured["summary"] == "mcp failed"
+    assert captured["summary"] == "mcp 执行失败"
     assert captured["provider_used"] == "manual_mcp"
     assert captured["fallback_used"] is False
     assert captured["payload"]["error_type"] == "mcp_not_allowed"
@@ -117,7 +117,7 @@ def test_nl_run_manual_mcp_run_failed_records_event(client, monkeypatch):
 
     assert captured["type_"] == "mcp"
     assert captured["tool_succeeded"] is False
-    assert captured["summary"] == "mcp failed"
+    assert captured["summary"] == "mcp 执行失败"
     assert captured["payload"]["error_type"] == "mcp_run_failed"
 
 
@@ -149,4 +149,4 @@ def test_nl_run_manual_mcp_success_records_event(client, monkeypatch):
 
     assert captured["type_"] == "mcp"
     assert captured["tool_succeeded"] is True
-    assert captured["summary"] == "mcp success: echo"
+    assert captured["summary"] == "mcp 执行成功: echo"

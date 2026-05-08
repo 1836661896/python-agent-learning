@@ -101,7 +101,7 @@ def test_chat_stream_mcp_not_allowed_records_event(client, monkeypatch):
     assert captured["type_"] == "mcp"
     assert captured["endpoint"] == "/chat/stream"
     assert captured["tool_succeeded"] is False
-    assert captured["summary"] == "mcp failed"
+    assert captured["summary"] == "mcp 执行失败"
     assert captured["provider_used"] == "manual_mcp"
     assert captured["fallback_used"] is False
 
@@ -149,7 +149,7 @@ def test_chat_stream_mcp_run_failed_records_event(client, monkeypatch):
     assert captured["type_"] == "mcp"
     assert captured["endpoint"] == "/chat/stream"
     assert captured["tool_succeeded"] is False
-    assert captured["summary"] == "mcp failed"
+    assert captured["summary"] == "mcp 执行失败"
     assert captured["provider_used"] == "manual_mcp"
     assert captured["fallback_used"] is False
 

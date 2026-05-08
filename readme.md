@@ -16,7 +16,8 @@
   - ✅ 阶段 0～3 已完成（含 FastAPI GET /health、POST /tasks）
   - ✅ 前端 **阶段 2（组件拆分）** 已完成（`HealthHeader`、`AgentCommand`、`LastStep`、`StepList`、`TaskSection` 等，见 `frontend/readme.md`）。
   - 🔄 **前端下一步**：**阶段 3**（请求层与错误体验）；已与 **`POST /chat`**、**`POST /agent/nl-run`** 联调（见 **`frontend/readme.md`**）；后续配合后端 **流式 SSE** 扩展 `ChatPanel`。
-  - 🔄 **后端下一步**：**记忆摘要精炼 `memory_summary`（`maybe_refine_memory`）**、环境变量 **`MEMORY_*`**；**`doc_sessions` 绑定通用 `conversation_id`** 并复用 `build_augmented_user_text`；可选 **`/agent/nl-run` 与会话记忆对齐**；**`POST /chat` 各分支统一返回 `conversation_id`（尤其 planner→MCP）** 与消息落库对齐。左侧统一时间线仍以 **`GET /events`** + **`conversation_id`/`turn_id`** 联调（见「产品/架构共识」）。支线 **文档助手** 见下文；**鉴权（阶段 9）**；按需 **`TEST_DATABASE_URL`**。
+  - 🔄 **后端下一步**（与代码同步，见 **2026-05-09 / 2026-05-10**）：**`POST /chat` 非流式**在 **planner→MCP**（经 **`mcp_outcomes` / `non_stream._handle_mcp_non_stream`**）路径上 **`data` 仍缺 `conversation_id`/`turn_id`**，需与 chat / fallback 分支对齐；**`doc_sessions` 绑定通用 `conversation_id`** 并复用 **`build_augmented_user_text`**；可选 **`/agent/nl-run` 与会话记忆对齐**。左侧时间线仍以 **`GET /events`** + **`conversation_id`/`turn_id`** 联调（见「产品/架构共识」）。支线 **文档助手** 见下文；**鉴权（阶段 9）**；按需 **`TEST_DATABASE_URL`**。
+  - ✅ **已落地（勿再写入待办）**：**`maybe_refine_memory`**（阈值精炼 **`memory_summary`**）、**`.env.example` 中 `MEMORY_*`**（`src/services/conversation_memory.py`）；**Alembic `1078372ccdda`**（`agent_steps` / `events` 列 **`tool_succeeded`** 重命名）已在目标库执行，**`pytest` 全量通过**作验收。**`src/routers/chat/mcp_outcomes.py`**：**非流式 MCP** 用 **`finalize_mcp_non_stream_failure` / `finalize_mcp_non_stream_success`**（**`non_stream._handle_mcp_non_stream`** 内调用）；**SSE** 在 **`yield from _stream_mcp_tool`** 之后用 **`finalize_stream_mcp_turn`**（**`logic.event_stream`**；planner→MCP 传 **`plan_meta`**，勿用 **`manual_meta`**）。
 - **主要目标**：
   - 搭建 Agent 雏形（支持基础命令，历史阶段）✅
   - Web API（FastAPI）作为核心服务层（当前主线）✅
@@ -116,7 +117,29 @@
 ### `POST /chat` 与 `conversation_id`
 
 - **`ChatRequest`** 可选 **`conversation_id`**；部分成功响应 **`data` 中含 `conversation_id`**，供续聊与 **`GET /conversations/.../messages`** 联调。
-- **当前实现注意**：走 **`route: chat`**（含 planner 失败后的 fallback）等路径时，响应里会带 **`conversation_id`**；**planner 判定为 MCP** 时，非流式 **`_handle_mcp_non_stream` 返回体可能尚未带 `conversation_id`**（与显式 MCP 入口同理，后续在编排层对齐）。联调时请以实际 JSON 为准，或先用手动已知的 `conversation_id` 测历史接口。
+- **当前实现注意**：走 **`route: chat`**（含 planner 失败后的 fallback）等路径时，响应里会带 **`conversation_id`**；**planner 判定为 MCP** 时，非流式 MCP 收口在 **`mcp_outcomes.finalize_mcp_non_stream_*`**，**`data` 仍可能不带 `conversation_id`/`turn_id`**（显式 MCP 同理），需在收口或调用处补字段后更新本节。联调时请以实际 JSON 为准，或先用手动已知的 `conversation_id` 测历史接口。
+
+---
+
+## 最近一次学习（日期：2026-05-10）
+
+### 本次补充（chat 包：MCP 收口模块 + 非流式拆分）
+
+- **新文件 `src/routers/chat/mcp_outcomes.py`**：**`finalize_mcp_non_stream_failure`** / **`finalize_mcp_non_stream_success`** — 统一非流式 MCP 的 **`done`**、**`build_mcp_event_payload`**、**`_record_chat_event`**、**`fail`/`success`**；**`finalize_stream_mcp_turn`** — 在 **`yield from _stream_mcp_tool`** 之后调用 **`_record_stream_mcp_event`** 与 **`_s_done`**（成功/失败共用）。
+- **`non_stream.py`**：**`_handle_mcp_non_stream`** 只做白名单与 **`call_tool`**，结果走 **`mcp_outcomes`**；**builtin** 仍在本文件。
+- **`logic.py`**：流式 MCP 两处收尾改为 **`finalize_stream_mcp_turn`**；**planner→MCP** 第三个参数须为 **`plan_meta`**（与 **`_stream_mcp_tool(..., plan_meta)`** 一致），避免误用仅存在于显式 MCP 分支的 **`manual_meta`** 导致 **`NameError`**。
+- **`sse.py`**：本次未改；MCP 帧与 **`_stream_mcp_tool`** 仍在 **`sse.py`**。
+- **提交前**：**`python -m pytest -q`** 全量通过后再 **`git commit`**。
+
+---
+
+## 最近一次学习（日期：2026-05-09）
+
+### 本次补充（文档与后端进度对齐）
+
+- **Alembic**：`alembic/versions/1078372ccdda_describe_change.py` — `agent_steps` 列 **`ok_flag`→`tool_succeeded`**、`events` 列 **`ok`→`tool_succeeded`**（与 ORM、事件字段命名一致）；在目标环境执行 **`alembic upgrade head`** 后，以全量 **`python -m pytest -q`**（如 **57 passed**）验收。
+- **会话记忆**：**`maybe_refine_memory`**、**`MEMORY_RECENT_MESSAGE_ROWS` / `MEMORY_RECENT_CHAR_BUDGET` / `MEMORY_REFINE_THRESHOLD_MESSAGES` / `MEMORY_REFINE_CONTEXT_MESSAGES`** 已在 **`src/services/conversation_memory.py`** 与 **`.env.example`** 落地，并由 **`/chat`**、**`/chat/stream`** 在适当时机调用；此前写在 **2026-05-04** 下的「下一步编码」中关于精炼与 `MEMORY_*` 的条目**已完成**；请以本文 **「基本项目信息」**、**「下一次学习的起点」** 为准。
+- **readme**：刷新 **「基本项目信息 · 后端下一步」**、**「下一次学习的起点」**、本节，避免将已完成功能重复列为待办；**仍优先编码项**：非流式 MCP **`mcp_outcomes`** / **`POST /chat` `data`**（及必要时事件 payload）补齐 **`conversation_id`/`turn_id`**（见 **2026-05-10** chat 收口后实现位置）。
 
 ---
 
@@ -165,7 +188,7 @@
 - **`POST /chat`（非流式）**：走 planner 前写入用户消息并 `commit`；**`plan` / `chat_simple` 使用 `augmented`**（含记忆包）；助手回复后写入 assistant 并 `commit`；**`events` payload** 含 **`conversation_id`、`turn_id`**（与 `request_id` 对齐）。
 - **`POST /chat/stream`（SSE）**：路由内 **`SessionLocal()`** 注入 **`event_stream(..., db)`**（实现位于 **`src/routers/chat/logic.py`**），**`finally: db.close()`**；与 non-stream 相同的 **ensure → augmented → user → commit**；**`plan` / `chat_streaming` 使用 `augmented`**；流式结束后拼接全文写入 assistant；**`_record_stream_chat_event`** 支持 **`reply` 全文及 `conversation_id`、`turn_id`**。
 - **测试**：`tests/test_conversation_memory_chat.py`（mock DB + memory，断言降级路径用 `augmented`、流式拼接 `aabb` 等）；可与 curl 冒烟：`/chat` 与 `/chat/stream` 返回正常且库中有对应消息行。
-- **下一步编码**：实现 **`maybe_refine_memory`**（阈值触发，更新 `memory_summary`，精炼调用勿再走 `append_message`）；`.env.example` 增加 **`MEMORY_RECENT_TURNS` / `MEMORY_REFINE_THRESHOLD_MESSAGES`** 等；`doc_sessions` 挂 **`conversation_id`**。
+- **下一步编码（历史）**：其中 **`maybe_refine_memory`**、**`.env.example` 的 `MEMORY_*`** 已实现（见 **2026-05-09 文档对齐**）；**`doc_sessions` 挂 `conversation_id`** 仍为待办。
 
 ---
 
@@ -394,10 +417,10 @@
 1. **前端（按需）**：**`myproject/frontend`** —— 继续 **阶段 3**（`http.ts` 错误分类、各 Query 错误态）；布局上已分 **左栏（Agent / 历史 / 任务）** 与 **右栏 `ChatPanel`**，待后端 **SSE** 后接流式 UI。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
 2. **后端（与「产品/架构共识」对齐）**
-   - **会话记忆（进行中）**：**`conversation` / `conversation_messages` 与 `/chat`、`/chat/stream` 落库** 已完成（见 **2026-05-04**）；**chat 包** 内已分层：**`logic.py`**（`chat_endpoint` / `event_stream` 编排）、**`sse.py`**（流式拼装）、**`events.py`**（事件落库）、**`chat_turn.py`**（一轮准备与 planner 拆包）、**`pkg.py`**（**`_chat_pkg()`**）、**`router.py`**（注册路由）；详见 **2026-05-08**。测试仍 **`import src.routers.chat as chat_module`** 做 monkeypatch。可选下一步：抽出 **`non_stream.py`**（**`_handle_builtin_non_stream`** / **`_handle_mcp_non_stream`**，必要时迁入 **`chat_endpoint`**）。主线仍优先：**`maybe_refine_memory`**、**`.env.example` 增加 `MEMORY_*`**、配好 DB 后全量 **`pytest tests/`** 回归。
-   - **文档助手与通用会话衔接**：`doc_sessions` 挂 **`conversation_id`**，复用 **`build_augmented_user_text`**；未完成的 **`doc_sessions` / `doc_session_messages` 表与路由** 仍按 **「支线：后端会话式文档生成」** 推进。
-   - **`GET /events`**：已支持 **`page` / `limit` / `total`** 与 **`type` / `command` / `status`** 筛选（详见 **最近一次学习 2026-05-02**）；与 **`conversation_id` / `turn_id`** 联调左栏时间线。
-   - **可选**：**`/agent/nl-run` 与会话记忆对齐**；**`GET /conversations/{id}/messages`** 拉纯聊天历史。
+   - **会话记忆**：**`conversation` / `conversation_messages` 与 `/chat`、`/chat/stream` 落库**（**2026-05-04**）；**`maybe_refine_memory` + `MEMORY_*`**（**2026-05-09**）；**chat 包** 分层（**2026-05-08**）+ **MCP 收口 `mcp_outcomes.py`** + **`non_stream.py`**（builtin + 轻量 MCP 分支）（**2026-05-10**）。测试仍 **`import src.routers.chat as chat_module`** monkeypatch。库表列名 **`tool_succeeded`**：迁移 **`1078372ccdda`**（见 **2026-05-09**）。**仍优先编码**：**`POST /chat` 非流式 planner→MCP** 的 **`data`（及事件 payload 若需）** 补齐 **`conversation_id`/`turn_id`**（改 **`mcp_outcomes.finalize_mcp_non_stream_*`** 或调用方传参）。**可选**：**`event_stream` → `stream.py`**；**`sse.py`** 抽通用 **`error` + `done`** 帧。
+   - **文档助手与通用会话衔接**：`doc_sessions` 挂 **`conversation_id`**，复用 **`build_augmented_user_text`**；按 **「支线：后端会话式文档生成」** 推进。
+   - **`GET /events`**：已支持 **`page` / `limit` / `total`** 与 **`type` / `command` / `status`** 筛选（**2026-05-02**）；与 **`conversation_id` / `turn_id`** 联调左栏时间线。
+   - **可选**：**`/agent/nl-run` 与会话记忆对齐**。**`GET /conversations/{id}/messages`** 已具备（见 **「聊天与会话 API 备忘」**）。
    - **分级路由（渐进）**：一级结构化路由 + 二级专职处理器；与 **`run_tool` / MCP 白名单** 的安全策略保持一致。
    - **阶段 7**：**`docker compose`** 已可 **`db` + `api`**；换设备见 **「最近一次学习 → 阶段 7 收口」**。
    - **pytest**：新链路用 **`TestClient`** + mock；按需 **`TEST_DATABASE_URL`**。
