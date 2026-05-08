@@ -3,13 +3,13 @@ import pytest
 from src.llm.agent_plan import PlanError, parse_plan_json, validate_plan
 
 
-def test_parse_plan_json_ok():
+def test_parse_plan_json_success():
     raw = '{"kind": "mcp", "tool_name": "echo", "arguments": {"text": "hi"}}'
     obj = parse_plan_json(raw)
     assert obj["kind"] == "mcp"
 
 
-def test_parse_plan_json_markdown_block_ok():
+def test_parse_plan_json_markdown_block_success():
     raw = """```json
 {"kind": "chat", "answer_hint": ""}
 ```"""
@@ -17,7 +17,7 @@ def test_parse_plan_json_markdown_block_ok():
     assert obj["kind"] == "chat"
 
 
-def test_validate_ok():
+def test_validate_success():
     plan = {"kind": "mcp", "tool_name": "echo", "arguments": {"text": "hi"}}
     out = validate_plan(
         plan, {"echo", "ping"}, {"time", "list", "help", "version", "echo", "add"}

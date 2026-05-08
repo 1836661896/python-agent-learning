@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.api_response import fail, ok
+from src.api_response import fail, success
 from src.db.deps import get_db
 from src.llm import get_llm_client
 from src.models.DocSession import DocSession
@@ -75,7 +75,7 @@ def create_doc_session(body: DocSessionCreate, db: Session = Depends(get_db)):
         db.add(session)
         db.commit()
         db.refresh(session)
-        return ok(
+        return success(
             "创建成功",
             {
                 "session_id": session.id,
@@ -96,7 +96,7 @@ def get_doc_session(session_id: int, db: Session = Depends(get_db)):
     row = db.get(DocSession, session_id)
     if row is None:
         return fail("会话不存在")
-    return ok(
+    return success(
         "查询成功",
         {
             "session_id": row.id,
@@ -154,7 +154,7 @@ def append_doc_session_message(
         db.refresh(user_msg)
         db.refresh(assistant_msg)
 
-        return ok(
+        return success(
             "发送成功",
             {
                 "session_id": session_id,
@@ -197,7 +197,7 @@ def list_doc_session_messages(session_id: int, db: Session = Depends(get_db)):
         for r in rows
     ]
 
-    return ok("查询成功", {"session_id": session_id, "items": items})
+    return success("查询成功", {"session_id": session_id, "items": items})
 
 
 @router.post("/doc-sessions/{session_id}/generate")
@@ -233,13 +233,13 @@ def generate_doc_session_docx(session_id: int, db: Session = Depends(get_db)):
             type_="doc_session",
             endpoint="/doc-sessions/generate",
             request_id=request_id,
-            ok=True,
+            tool_succeeded=True,
             provider_used="docx",
             summary=f"itinerary docx: session_id={session_id}",
             payload={"session_id": session_id, "filename": filename},
         )
 
-        return ok(
+        return success(
             "已生成",
             {
                 "session_id": session_id,
@@ -255,7 +255,7 @@ def generate_doc_session_docx(session_id: int, db: Session = Depends(get_db)):
             type_="doc_session",
             endpoint="/doc-sessions/generate",
             request_id=request_id,
-            ok=False,
+            tool_succeeded=False,
             provider_used="docx",
             summary="docx generate failed",
             payload={"session_id": session_id, "error_type": "docx_write_failed"},

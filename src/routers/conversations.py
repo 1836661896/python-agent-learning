@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from src.api_response import fail, ok
+from src.api_response import fail, success
 from src.db.deps import get_db
 from src.models.ConversationMessages import ConversationMessages
 from src.services.conversation_memory import list_conversation_messages_paginated
@@ -37,6 +37,6 @@ def get_message_list(
 
     rows, total = page_data
     records = [_message_row_to_item(m) for m in rows]
-    return ok(
+    return success(
         "查询成功", {"records": records, "page": page, "limit": limit, "total": total}
     )

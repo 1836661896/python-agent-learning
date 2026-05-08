@@ -60,8 +60,8 @@ class MCPClient:
                         text_parts.append(getattr(item, "text", ""))
 
                 return {
-                    "ok": not result.isError,
-                    "msg": "ok" if not result.isError else "tool error",
+                    "tool_succeeded": not result.isError,
+                    "msg": "MCP 工具执行成功" if not result.isError else "MCP 工具执行失败",
                     "data": {
                         "text": "\n".join(text_parts).strip(),
                         "structured": result.structuredContent,

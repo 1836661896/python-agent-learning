@@ -39,7 +39,7 @@ def build_mcp_event_payload(
     route: str,
     tool_name: str,
     plan_meta: dict | None,
-    ok_flag: bool,
+    tool_succeeded: bool,
     result_data: dict | None = None,
     error_type: str | None = None,
     detail: str | None = None,
@@ -51,16 +51,16 @@ def build_mcp_event_payload(
         "tool_name": tool_name,
         "planner_meta": plan_meta,
     }
-    if ok_flag:
+    if tool_succeeded:
         payload["result"] = result_data or {}
-        return f"mcp success: {tool_name}", payload
+        return f"mcp 执行成功: {tool_name}", payload
 
     payload["error_type"] = error_type or "mcp_run_failed"
     if detail is not None:
         payload["detail"] = detail
     if allowed is not None:
         payload["allowed"] = allowed
-    return "mcp failed", payload
+    return "mcp 执行失败", payload
 
 
 def build_mcp_fail_data(
@@ -88,7 +88,7 @@ def build_builtin_event_payload(
     *,
     cmd: str,
     plan_meta: dict | None,
-    ok_flag: bool,
+    tool_succeeded: bool,
     tool_msg: str,
     data,
 ) -> tuple[str, dict]:
@@ -99,9 +99,9 @@ def build_builtin_event_payload(
         "tool_msg": tool_msg,
         "planner_meta": plan_meta,
     }
-    if ok_flag:
+    if tool_succeeded:
         payload["result"] = data
-        return f"builtin success: {cmd}", payload
+        return f"builtin 执行成功: {cmd}", payload
 
     payload["error_type"] = "builtin_run_failed"
-    return f"builtin failed: {cmd}", payload
+    return f"builtin 执行失败: {cmd}", payload

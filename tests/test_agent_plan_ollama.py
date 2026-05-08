@@ -34,7 +34,7 @@ class _FakeClient:
         )
 
 
-def test_plan_with_ollama_mcp_ok(monkeypatch):
+def test_plan_with_ollama_mcp_success(monkeypatch):
     monkeypatch.setattr(plan_module.httpx, "Client", _FakeClient)
 
     mcp_tools = [

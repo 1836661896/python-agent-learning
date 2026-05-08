@@ -10,7 +10,7 @@ from src.services.conversation_memory import (
 )
 from src.services.event_services import record_event
 
-from .logic import llm_client, mcp_client
+from .deps import llm_client, mcp_client
 from .router import router
 
 __all__ = [

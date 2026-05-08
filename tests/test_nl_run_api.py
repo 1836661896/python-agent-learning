@@ -1,7 +1,7 @@
 import src.routers.agent as agent_router_module
 
 
-def test_nl_run_api_ok(client, monkeypatch):
+def test_nl_run_api_success(client, monkeypatch):
     # 新逻辑： patch planner， 返回 builtin 命令
     monkeypatch.setattr(
         agent_router_module.llm_client,
@@ -81,7 +81,7 @@ def test_nl_run_manual_mcp_not_allowed_records_event(client, monkeypatch):
 
     assert captured["type_"] == "mcp"
     assert captured["endpoint"] == "/agent/nl-run"
-    assert captured["ok"] is False
+    assert captured["tool_succeeded"] is False
     assert captured["summary"] == "mcp failed"
     assert captured["provider_used"] == "manual_mcp"
     assert captured["fallback_used"] is False
@@ -103,7 +103,7 @@ def test_nl_run_manual_mcp_run_failed_records_event(client, monkeypatch):
     monkeypatch.setattr(
         agent_router_module.mcp_client,
         "call_tool",
-        lambda tool_name, args: {"ok": False, "msg": "mock mcp error", "data": {}},
+        lambda tool_name, args: {"tool_succeeded": False, "msg": "mock mcp error", "data": {}},
     )
 
     resp = client.post("/agent/nl-run", json={"text": 'mcp echo {"text":"hi"}'})
@@ -116,7 +116,7 @@ def test_nl_run_manual_mcp_run_failed_records_event(client, monkeypatch):
     assert "mock mcp error" in body["data"]["detail"]
 
     assert captured["type_"] == "mcp"
-    assert captured["ok"] is False
+    assert captured["tool_succeeded"] is False
     assert captured["summary"] == "mcp failed"
     assert captured["payload"]["error_type"] == "mcp_run_failed"
 
@@ -136,7 +136,7 @@ def test_nl_run_manual_mcp_success_records_event(client, monkeypatch):
     monkeypatch.setattr(
         agent_router_module.mcp_client,
         "call_tool",
-        lambda tool_name, args: {"ok": True, "msg": "ok", "data": {"text": "hi"}},
+        lambda tool_name, args: {"tool_succeeded": True, "msg": "success", "data": {"text": "hi"}},
     )
 
     resp = client.post("/agent/nl-run", json={"text": 'mcp echo {"text":"hi"}'})
@@ -148,5 +148,5 @@ def test_nl_run_manual_mcp_success_records_event(client, monkeypatch):
     assert body["data"]["result"]["text"] == "hi"
 
     assert captured["type_"] == "mcp"
-    assert captured["ok"] is True
+    assert captured["tool_succeeded"] is True
     assert captured["summary"] == "mcp success: echo"

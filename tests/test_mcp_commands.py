@@ -4,8 +4,8 @@ from src.mcp.commands import parse_kv_args, parse_mcp_call
 
 
 def test_parse_kv_basic_types():
-    data = parse_kv_args("a=1 b=3.14 ok=true name=tom")
-    assert data == {"a": 1, "b": 3.14, "ok": True, "name": "tom"}
+    data = parse_kv_args("a=1 b=3.14 tool_succeeded=true name=tom")
+    assert data == {"a": 1, "b": 3.14, "tool_succeeded": True, "name": "tom"}
 
 
 def test_parse_kv_args_none_and_null():

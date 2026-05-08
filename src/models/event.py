@@ -18,7 +18,7 @@ class EventModel(Base):
 
     request_id: Mapped[str] = mapped_column(String(length=32), default=True)
 
-    ok: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    tool_succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     provider_used: Mapped[str] = mapped_column(
         String(length=50), nullable=False, default="unknown"

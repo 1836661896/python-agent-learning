@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.api_response import fail, ok
+from src.api_response import fail, success
 from src.db.deps import get_db
 from src.models.task import TaskModel
 from src.schemas import TaskCreate
@@ -20,7 +20,7 @@ def get_task_list(db: Session = Depends(get_db)):
         db.execute(select(TaskModel).order_by(TaskModel.task_id.asc())).scalars().all()
     )
     data = [{"task_id": r.task_id, "task_name": r.task_name} for r in rows]
-    return ok("请求成功", data)
+    return success("请求成功", data)
 
 
 @router.post("/tasks")
@@ -38,7 +38,7 @@ def create_task(body: TaskCreate, db: Session = Depends(get_db)):
         db.add(task)
         db.commit()
         db.refresh(task)
-        return ok("添加成功", {"task_id": task.task_id, "task_name": task.task_name})
+        return success("添加成功", {"task_id": task.task_id, "task_name": task.task_name})
     except Exception:
         logger.exception("添加任务失败")
         return fail("添加失败")
@@ -53,4 +53,4 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
 
     db.delete(task)
     db.commit()
-    return ok("删除任务成功")
+    return success("删除任务成功")

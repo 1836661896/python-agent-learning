@@ -5,15 +5,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.api_response import fail, ok
+from src.api_response import fail, success
 from src.routers import (
     agent_router,
     chat_router,
+    conversations_router,
     doc_sessions_router,
     event_router,
     mcp_router,
     tasks_router,
-    conversations_router,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ def http_exception_handler(request, exc: HTTPException):
 # 健康监测。确保接口畅通
 @app.get("/health")
 def health():
-    return ok("服务器正常")
+    return success("服务器正常")
 
 
 app.include_router(tasks_router)

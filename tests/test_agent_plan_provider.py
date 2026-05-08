@@ -11,7 +11,7 @@ def test_plan_with_llm_routes_to_ollama(monkeypatch):
         "plan_with_ollama",
         lambda user_text, mcp_tools, allowed_builtin_cmds: {
             "kind": "chat",
-            "answer_hint": "ok",
+            "answer_hint": "success",
         },
     )
     monkeypatch.setattr(
@@ -25,7 +25,7 @@ def test_plan_with_llm_routes_to_ollama(monkeypatch):
 
     out = plan_module.plan_with_llm("hi", [], {"time"})
     assert out["plan"]["kind"] == "chat"
-    assert out["plan"]["answer_hint"] == "ok"
+    assert out["plan"]["answer_hint"] == "success"
     assert out["meta"]["provider_used"] == "ollama"
     assert out["meta"]["fallback_used"] is False
 
@@ -46,12 +46,12 @@ def test_plan_with_llm_routes_to_zhipu(monkeypatch):
         "plan_with_zhipu",
         lambda user_text, mcp_tools, allowed_builtin_cmds: {
             "kind": "chat",
-            "answer_hint": "ok",
+            "answer_hint": "success",
         },
     )
     out = plan_module.plan_with_llm("hi", [], {"time"})
     assert out["plan"]["kind"] == "chat"
-    assert out["plan"]["answer_hint"] == "ok"
+    assert out["plan"]["answer_hint"] == "success"
     assert out["meta"]["provider_used"] == "zhipu"
     assert out["meta"]["fallback_used"] is False
 

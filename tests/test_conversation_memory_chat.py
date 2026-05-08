@@ -114,12 +114,12 @@ def test_chat_planneror_fallback_uses_augmented(client, monkeypatch, memory_mock
     monkeypatch.setattr(
         chat_module.llm_client,
         "chat_simple",
-        lambda msg: ("OK") if msg.startswith("AUGMENTED:") else "BAD",
+        lambda msg: ("success") if msg.startswith("AUGMENTED:") else "BAD",
     )
 
     resp = client.post("/chat", json={"message": "测试"})
     assert resp.status_code == 200
-    assert resp.json()["data"]["text"] == "OK"
+    assert resp.json()["data"]["text"] == "success"
     assert len(calls) == 2
 
 

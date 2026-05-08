@@ -12,7 +12,7 @@ class AgentStep(Base):
     step_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tool_name: Mapped[str] = mapped_column(String(length=255), nullable=False)
     input_text: Mapped[str] = mapped_column(String(255), nullable=False)
-    ok_flag: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    tool_succeeded: Mapped[bool] = mapped_column(Boolean, nullable=False)
     msg: Mapped[str] = mapped_column(String(50), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

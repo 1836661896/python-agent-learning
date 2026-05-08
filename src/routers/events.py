@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from src.api_response import ok
+from src.api_response import success
 from src.db.deps import get_db
 from src.models.event import EventModel
 from src.utils.datetime_fmt import format_step_ts_utc
@@ -18,7 +18,7 @@ def list_events(
     page: int = Query(1, ge=1),
     event_type: str | None = Query(None, alias="type"),
     command: str | None = Query(None),
-    status: Literal["all", "success", "failed"] = Query("all"),
+    status: Literal["all", "tool_succeeded", "failed"] = Query("all"),
     db: Session = Depends(get_db),
 ):
     conds: list = []
@@ -26,10 +26,10 @@ def list_events(
     if event_type is not None:
         conds.append(EventModel.type == event_type)
 
-    if status == "success":
-        conds.append(EventModel.ok.is_(True))
+    if status == "tool_succeeded":
+        conds.append(EventModel.tool_succeeded.is_(True))
     elif status == "failed":
-        conds.append(EventModel.ok.is_(False))
+        conds.append(EventModel.tool_succeeded.is_(False))
 
     if command is not None:
         conds.append(EventModel.payload["command"].astext == command)
@@ -61,7 +61,7 @@ def list_events(
             "type": r.type,
             "endpoint": r.endpoint,
             "request_id": r.request_id,
-            "ok": r.ok,
+            "tool_succeeded": r.tool_succeeded,
             "provider_used": r.provider_used,
             "fallback_used": r.fallback_used,
             "summary": r.summary,
@@ -71,6 +71,6 @@ def list_events(
         for r in rows
     ]
 
-    return ok(
+    return success(
         "查询成功", {"records": records, "page": page, "limit": limit, "total": total}
     )

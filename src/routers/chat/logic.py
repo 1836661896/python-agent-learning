@@ -1,4 +1,3 @@
-import json
 import logging
 from collections.abc import Generator
 from typing import Any
@@ -6,10 +5,8 @@ from typing import Any
 import httpx
 from sqlalchemy.orm import Session
 
-from src.api_response import fail, ok
-from src.llm import get_llm_client
+from src.api_response import fail, success
 from src.llm.agent_plan import PlanError
-from src.mcp import MCPClient
 from src.models.ConversationMessages import MessageRole
 from src.routers.nl_utils import (
     ALLOWED_BUILTIN_CMDS,
@@ -22,18 +19,30 @@ from src.routers.nl_utils import (
 from src.schemas import ChatRequest
 from src.utils.obs_log import log_done, new_request_id
 
+from .chat_turn import (
+    FALLBACK_CHAT_META,
+    _builtin_rejected_message,
+    _prepare_planner_user_turn,
+    _unwrap_plan_result,
+)
+from .deps import llm_client, mcp_client
+from .events import (
+    _record_builtin_rejected_event,
+    _record_chat_event,
+    _record_stream_chat_event,
+    _record_stream_mcp_event,
+    _stream_done_extra_for_mcp,
+)
+from .pkg import _chat_pkg
+from .sse import (
+    _mcp_sse_error,
+    _over_chat,
+    _sse_data,
+    _stream_mcp_tool,
+    _yield_sse_chat_stream,
+)
+
 logger = logging.getLogger(__name__)
-mcp_client = MCPClient()
-llm_client = get_llm_client()
-
-FALLBACK_CHAT_META = {"provider_used": "planner_fallback_chat", "fallback_used": True}
-
-
-def _chat_pkg():
-    """供测试通过 src.routers.chat 上的 monkeypatch 生效（逻辑在 logic 子模块）。"""
-    import src.routers.chat as pkg
-
-    return pkg
 
 
 def _make_request_done_logger(
@@ -44,7 +53,7 @@ def _make_request_done_logger(
 ):
     def _done(
         route_kind: str,
-        ok_flag: bool,
+        tool_succeeded: bool,
         plan_meta: dict[str, Any] | None = None,
         *,
         error: Exception | None = None,
@@ -56,268 +65,13 @@ def _make_request_done_logger(
             endpoint=endpoint,
             request_id=request_id,
             route_kind=route_kind,
-            ok=ok_flag,
+            tool_succeeded=tool_succeeded,
             plan_meta=plan_meta,
             error=error,
             extra=extra,
         )
 
     return _done
-
-
-def _prepare_planner_user_turn(
-    db: Session,
-    body: ChatRequest,
-    request_id: str,
-) -> tuple[Any, str, str]:
-    """校验会话、写入用户消息并提交；返回 (conv, turn_id, augmented)。"""
-    turn_id = request_id
-    p = _chat_pkg()
-    conv = p.ensure_conversation(db, body.conversation_id)
-    augmented = p.build_augmented_user_text(db, conv, body.message)
-    p.append_message(
-        db,
-        conv.id,
-        MessageRole.user,
-        body.message,
-        turn_id,
-        meta={"request_id": request_id},
-    )
-    db.commit()
-    return conv, turn_id, augmented
-
-
-def _record_chat_event(
-    type_: str,
-    request_id: str,
-    ok_flag: bool,
-    summary: str,
-    payload: dict[str, Any],
-    plan_meta: dict[str, Any] | None = None,
-    endpoint: str = "/chat",
-) -> None:
-    """统一记录聊天事件，支持区分非流式与流式端点。"""
-    meta = plan_meta or {}
-    _chat_pkg().record_event(
-        type_=type_,
-        endpoint=endpoint,
-        request_id=request_id,
-        ok=ok_flag,
-        provider_used=meta.get("provider_used", "unknown"),
-        fallback_used=bool(meta.get("fallback_used", False)),
-        summary=summary,
-        payload=payload,
-    )
-
-
-def _sse_data(obj: dict[str, Any]) -> str:
-    """单条 SSE：data 后为 JSON，结尾空行。"""
-    return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
-
-
-def _over_chat() -> str:
-    """统一结束事件。"""
-    return _sse_data({"type": "done"})
-
-
-def _yield_sse_chat_stream(augmented: str) -> Generator[str, None, str]:
-    """流式输出 chat delta SSE，return 拼接后的全文。"""
-    parts: list[str] = []
-    for chunk in llm_client.chat_streaming(augmented):
-        parts.append(chunk)
-        yield _sse_data({"type": "delta", "text": chunk})
-    return "".join(parts)
-
-
-def _unwrap_plan_result(
-    plan_result: dict[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """统一拆包 planner 返回：{'plan': ..., 'meta': ...}。"""
-    plan = plan_result["plan"]
-    plan_meta = plan_result.get("meta", {})
-    return plan, plan_meta
-
-
-def _record_builtin_rejected_event(
-    request_id: str,
-    cmd: str,
-    plan_meta: dict[str, Any] | None,
-    endpoint: str,
-) -> None:
-    """统一记录 builtin 命令被拒绝事件。"""
-    _record_chat_event(
-        type_="builtin",
-        request_id=request_id,
-        ok_flag=False,
-        summary="builtin rejected",
-        payload={
-            "route": "builtin",
-            "command": cmd,
-            "error_type": "command_not_allowed",
-            "planner_meta": plan_meta,
-        },
-        plan_meta=plan_meta,
-        endpoint=endpoint,
-    )
-
-
-def _builtin_rejected_message(cmd: str) -> str:
-    """统一被拒绝提示文案，避免非流式/流式写两份。"""
-    return (
-        "当前无法把这句话安全的转成可执行命令，或不在允许范围内。"
-        f"（解析结果：{cmd}；允许： list/time/help/version/echo.../add...）"
-    )
-
-
-def _mcp_sse_error(
-    msg: str,
-    detail: str = "",
-    tool_name: str = "",
-    allowed: list[str] | None = None,
-) -> str:
-    payload: dict[str, Any] = {"type": "error", "msg": msg, "route": "mcp"}
-    if detail:
-        payload["detail"] = detail
-    if tool_name:
-        payload["tool_name"] = tool_name
-    if allowed is not None:
-        payload["allowed"] = allowed
-    return _sse_data(payload)
-
-
-def _stream_mcp_tool(
-    tool_name: str,
-    args: dict[str, Any],
-    plan_meta: dict[str, Any] | None = None,
-) -> Generator[str, None, dict[str, Any]]:
-    """
-    流式执行 MCP 工具：
-    - 产出 SSE 文本
-    - return 执行摘要（ok/error/result），供外层统一写日志与事件
-    """
-    allowed = mcp_client.allowed_tool_names()
-    if tool_name not in allowed:
-        sorted_allowed = sorted(allowed)
-        yield _mcp_sse_error(
-            "不允许调用该 MCP 工具",
-            tool_name=tool_name,
-            allowed=sorted_allowed,
-        )
-        yield _over_chat()
-        return {
-            "ok": False,
-            "tool_name": tool_name,
-            "error_type": "mcp_not_allowed",
-            "allowed": sorted_allowed,
-        }
-
-    result = mcp_client.call_tool(tool_name, args)
-    if not result.get("ok"):
-        detail = str(result)
-        yield _mcp_sse_error(
-            result.get("msg", "tool error"),
-            tool_name=tool_name,
-            detail=detail,
-        )
-        yield _over_chat()
-        return {
-            "ok": False,
-            "tool_name": tool_name,
-            "error_type": "mcp_run_failed",
-            "detail": detail,
-        }
-
-    data = result.get("data") or {}
-    yield _sse_data({"type": "delta", "text": data.get("text", "")})
-    yield _sse_data(
-        {
-            "type": "tool_result",
-            "ok": True,
-            "route": "mcp",
-            "tool_name": tool_name,
-            "data": data,
-            "planner_meta": plan_meta or {},
-        }
-    )
-    yield _over_chat()
-    return {"ok": True, "tool_name": tool_name, "result": data}
-
-
-def _stream_done_extra_for_mcp(mcp_exec: dict[str, Any]) -> dict[str, str]:
-    """统一 mcp 失败日志字段，避免手动/plan 两条路径重复拼装。"""
-    return {
-        "error_type": mcp_exec.get("error_type", "mcp_run_failed"),
-        "error_msg": str(
-            mcp_exec.get("detail") or mcp_exec.get("allowed") or "mcp failed"
-        ),
-    }
-
-
-def _record_stream_mcp_event(
-    request_id: str,
-    tool_name: str,
-    plan_meta: dict[str, Any] | None,
-    mcp_exec: dict[str, Any],
-) -> bool:
-    """
-    统一记录流式 mcp 事件，并返回 ok_flag。
-    - 手动 mcp 和 planner->mcp 共用
-    - 保证 summary/payload 结构一致
-    """
-    ok_flag = bool(mcp_exec.get("ok"))
-    summary, payload = build_mcp_event_payload(
-        route="mcp",
-        tool_name=tool_name,
-        plan_meta=plan_meta,
-        ok_flag=ok_flag,
-        result_data=mcp_exec.get("result"),
-        error_type=mcp_exec.get("error_type"),
-        detail=mcp_exec.get("detail"),
-        allowed=mcp_exec.get("allowed"),
-    )
-    _record_chat_event(
-        type_="mcp",
-        request_id=request_id,
-        ok_flag=ok_flag,
-        summary=summary,
-        payload=payload,
-        plan_meta=plan_meta,
-        endpoint="/chat/stream",
-    )
-    return ok_flag
-
-
-def _record_stream_chat_event(
-    request_id: str,
-    message: str,
-    plan_meta: dict[str, Any] | None,
-    summary: str,
-    *,
-    reply: str = "",
-    conversation_id: int | None = None,
-    turn_id: str | None = None,
-) -> None:
-    """流式 chat 事件：payload 带完整 reply 与 conversation 信息。"""
-    payload: dict[str, Any] = {
-        "route": "chat",
-        "message": message,
-        "reply": reply,
-        "planner_meta": plan_meta,
-    }
-    if conversation_id is not None:
-        payload["conversation_id"] = conversation_id
-    if turn_id is not None:
-        payload["turn_id"] = turn_id
-
-    _record_chat_event(
-        type_="chat",
-        request_id=request_id,
-        ok_flag=True,
-        summary=summary,
-        payload=payload,
-        endpoint="/chat/stream",
-        plan_meta=plan_meta,
-    )
 
 
 def _handle_builtin_non_stream(
@@ -340,29 +94,29 @@ def _handle_builtin_non_stream(
             {"route": "builtin", "command": cmd, "planner_meta": plan_meta},
         )
 
-    ok_flag, tool_msg, data = _chat_pkg().run_tool(cmd)
+    tool_succeeded, tool_msg, data = _chat_pkg().run_tool(cmd)
     summary, payload = build_builtin_event_payload(
         cmd=cmd,
         plan_meta=plan_meta,
-        ok_flag=bool(ok_flag),
+        tool_succeeded=tool_succeeded,
         tool_msg=str(tool_msg),
         data=data,
     )
 
-    if ok_flag:
+    if tool_succeeded:
         done("builtin", True, plan_meta)
         text = tool_msg if not data else f"{tool_msg}\n{data}"
         _record_chat_event(
             type_="builtin",
             request_id=request_id,
-            ok_flag=True,
+            tool_succeeded=True,
             summary=summary,
             payload=payload,
             plan_meta=plan_meta,
             endpoint="/chat",
         )
-        return ok(
-            "ok",
+        return success(
+            "builtin 执行成功",
             {
                 "route": "builtin",
                 "command": cmd,
@@ -381,7 +135,7 @@ def _handle_builtin_non_stream(
     _record_chat_event(
         type_="builtin",
         request_id=request_id,
-        ok_flag=False,
+        tool_succeeded=False,
         summary=summary,
         payload=payload,
         plan_meta=plan_meta,
@@ -419,14 +173,14 @@ def _handle_mcp_non_stream(
             route="mcp",
             tool_name=tool_name,
             plan_meta=plan_meta,
-            ok_flag=False,
+            tool_succeeded=False,
             error_type="mcp_not_allowed",
             allowed=sorted_allowed,
         )
         _record_chat_event(
             type_="mcp",
             request_id=request_id,
-            ok_flag=False,
+            tool_succeeded=False,
             summary=summary,
             payload=payload,
             plan_meta=plan_meta,
@@ -442,7 +196,7 @@ def _handle_mcp_non_stream(
         )
 
     result = mcp_client.call_tool(tool_name, args)
-    if not result.get("ok"):
+    if not result.get("tool_succeeded"):
         detail = str(result)
         done(
             "mcp",
@@ -454,14 +208,14 @@ def _handle_mcp_non_stream(
             route="mcp",
             tool_name=tool_name,
             plan_meta=plan_meta,
-            ok_flag=False,
+            tool_succeeded=False,
             error_type="mcp_run_failed",
             detail=detail,
         )
         _record_chat_event(
             type_="mcp",
             request_id=request_id,
-            ok_flag=False,
+            tool_succeeded=False,
             summary=summary,
             payload=payload,
             plan_meta=plan_meta,
@@ -483,13 +237,13 @@ def _handle_mcp_non_stream(
         route="mcp",
         tool_name=tool_name,
         plan_meta=plan_meta,
-        ok_flag=True,
+        tool_succeeded=True,
         result_data=result_data,
     )
     _record_chat_event(
         type_="mcp",
         request_id=request_id,
-        ok_flag=True,
+        tool_succeeded=True,
         summary=summary,
         payload=payload_event,
         plan_meta=plan_meta,
@@ -499,7 +253,7 @@ def _handle_mcp_non_stream(
     payload_resp = {"route": "mcp", "text": text, "result": result_data}
     if plan_meta is not None:
         payload_resp["planner_meta"] = plan_meta
-    return ok("ok", payload_resp)
+    return success("MCP 工具调用成功", payload_resp)
 
 
 def chat_endpoint(body: ChatRequest, db: Session):
@@ -568,7 +322,7 @@ def chat_endpoint(body: ChatRequest, db: Session):
             _record_chat_event(
                 type_="chat",
                 request_id=request_id,
-                ok_flag=True,
+                tool_succeeded=True,
                 summary="planner fallback chat",
                 payload={
                     "route": "chat",
@@ -581,8 +335,8 @@ def chat_endpoint(body: ChatRequest, db: Session):
                 plan_meta=FALLBACK_CHAT_META,
                 endpoint="/chat",
             )
-            return ok(
-                "ok",
+            return success(
+                "计划器 fallback 聊天回复成功",
                 {
                     "route": "chat",
                     "text": reply,
@@ -623,7 +377,7 @@ def chat_endpoint(body: ChatRequest, db: Session):
         _record_chat_event(
             type_="chat",
             request_id=request_id,
-            ok_flag=True,
+            tool_succeeded=True,
             summary="chat reply",
             payload={
                 "route": "chat",
@@ -636,8 +390,8 @@ def chat_endpoint(body: ChatRequest, db: Session):
             plan_meta=plan_meta,
             endpoint="/chat",
         )
-        return ok(
-            "ok",
+        return success(
+            "聊天回复成功",
             {
                 "route": "chat",
                 "text": reply,
@@ -683,14 +437,14 @@ def event_stream(
             endpoint="/chat/stream",
             request_id=request_id,
             route_kind="start",
-            ok=True,
+            tool_succeeded=True,
         )
 
         parsed, mcp_err = parse_manual_mcp_or_none(message)
         if mcp_err is not None:
             _s_done(
                 "mcp_parse_error",
-                False,
+                tool_succeeded=False,
                 error=ValueError(mcp_err),
                 extra={"error_type": "mcp_parse_error", "error_msg": mcp_err},
             )
@@ -703,14 +457,14 @@ def event_stream(
             manual_meta = {"provider_used": "manual_mcp", "fallback_used": False}
             mcp_exec = yield from _stream_mcp_tool(tool_name, args, manual_meta)
 
-            ok_flag = _record_stream_mcp_event(
+            tool_succeeded = _record_stream_mcp_event(
                 request_id, tool_name, manual_meta, mcp_exec
             )
             _s_done(
                 "mcp",
-                ok_flag,
+                tool_succeeded,
                 manual_meta,
-                extra=None if ok_flag else _stream_done_extra_for_mcp(mcp_exec),
+                extra=None if tool_succeeded else _stream_done_extra_for_mcp(mcp_exec),
             )
             return
 
@@ -720,7 +474,7 @@ def event_stream(
         except ValueError:
             _s_done(
                 "conversation_not_found",
-                False,
+                tool_succeeded=False,
                 extra={"error_type": "conversation_not_found"},
             )
             yield _sse_data({"type": "error", "msg": "会话不存在", "route": "chat"})
@@ -771,15 +525,15 @@ def event_stream(
                 tool_name, plan["arguments"], plan_meta
             )
 
-            ok_flag = _record_stream_mcp_event(
+            tool_succeeded = _record_stream_mcp_event(
                 request_id, tool_name, plan_meta, mcp_exec
             )
 
             _s_done(
                 "mcp",
-                ok_flag,
+                tool_succeeded,
                 plan_meta,
-                extra=None if ok_flag else _stream_done_extra_for_mcp(mcp_exec),
+                extra=None if tool_succeeded else _stream_done_extra_for_mcp(mcp_exec),
             )
             return
 
@@ -808,9 +562,9 @@ def event_stream(
                 yield _over_chat()
                 return
 
-            ok_flag, tool_msg, data = _chat_pkg().run_tool(cmd)
+            tool_succeeded, tool_msg, data = _chat_pkg().run_tool(cmd)
             line = tool_msg
-            if ok_flag:
+            if tool_succeeded:
                 if data is not None and str(data).strip():
                     line = f"{tool_msg}\n{data}"
             else:
@@ -820,7 +574,7 @@ def event_stream(
             yield _sse_data(
                 {
                     "type": "tool_result",
-                    "ok": bool(ok_flag),
+                    "tool_succeeded": bool(tool_succeeded),
                     "command": cmd,
                     "data": data,
                     "planner_meta": plan_meta,
@@ -829,24 +583,24 @@ def event_stream(
 
             _s_done(
                 "builtin",
-                bool(ok_flag),
+                bool(tool_succeeded),
                 plan_meta,
                 extra=None
-                if ok_flag
+                if tool_succeeded
                 else {"error_type": "builtin_run_failed", "error_msg": str(tool_msg)},
             )
 
             summary, payload = build_builtin_event_payload(
                 cmd=cmd,
                 plan_meta=plan_meta,
-                ok_flag=bool(ok_flag),
+                tool_succeeded=bool(tool_succeeded),
                 tool_msg=str(tool_msg),
                 data=data,
             )
             _record_chat_event(
                 type_="builtin",
                 request_id=request_id,
-                ok_flag=bool(ok_flag),
+                tool_succeeded=bool(tool_succeeded),
                 summary=summary,
                 payload=payload,
                 plan_meta=plan_meta,

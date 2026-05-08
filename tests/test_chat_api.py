@@ -78,7 +78,7 @@ def test_chat_plannerror_fallback_records_event(client, monkeypatch):
     # 4) 断言事件以记录，且语义正确
     assert captured["type_"] == "chat"
     assert captured["endpoint"] == "/chat"
-    assert captured["ok"] is True
+    assert captured["tool_succeeded"] is True
     assert captured["summary"] == "planner fallback chat"
     assert captured["provider_used"] == "planner_fallback_chat"
     assert captured["fallback_used"] is True
@@ -125,7 +125,7 @@ def test_chat_api_builtin_fail_records_event(client, monkeypatch):
     # 5) 断言事件入库参数
     assert captured["type_"] == "builtin"
     assert captured["endpoint"] == "/chat"
-    assert captured["ok"] is False
+    assert captured["tool_succeeded"] is False
     assert captured["summary"] == "builtin failed: time"
     assert captured["provider_used"] == "ollama"
     assert captured["fallback_used"] is False
@@ -162,7 +162,7 @@ def test_chat_api_builtin_rejected_records_event(client, monkeypatch):
 
     assert captured["type_"] == "builtin"
     assert captured["endpoint"] == "/chat"
-    assert captured["ok"] is False
+    assert captured["tool_succeeded"] is False
     assert captured["summary"] == "builtin rejected"
     assert captured["payload"]["route"] == "builtin"
     assert captured["payload"]["command"] == "unknown"

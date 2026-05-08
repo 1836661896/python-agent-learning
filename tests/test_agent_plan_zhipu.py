@@ -40,7 +40,7 @@ class _FakeClient:
         )
 
 
-def test_plan_with_zhipu_mcp_ok(monkeypatch):
+def test_plan_with_zhipu_mcp_success(monkeypatch):
     monkeypatch.setenv("ZHIPU_API_KEY", "fake-key-for-test")
     monkeypatch.setattr(plan_module.httpx, "Client", _FakeClient)
 

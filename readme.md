@@ -116,7 +116,21 @@
 ### `POST /chat` 与 `conversation_id`
 
 - **`ChatRequest`** 可选 **`conversation_id`**；部分成功响应 **`data` 中含 `conversation_id`**，供续聊与 **`GET /conversations/.../messages`** 联调。
-- **当前实现注意**：走 **`route: chat`**（含 planner 失败后的 fallback）等路径时，响应里会带 **`conversation_id`**；**planner 判定为 MCP** 时，非流式 **`_handle_mcp_non_stream` 返回体可能尚未带 `conversation_id`**（与显式 MCP 入口同理，后续在 `logic.py` 对齐）。联调时请以实际 JSON 为准，或先用手动已知的 `conversation_id` 测历史接口。
+- **当前实现注意**：走 **`route: chat`**（含 planner 失败后的 fallback）等路径时，响应里会带 **`conversation_id`**；**planner 判定为 MCP** 时，非流式 **`_handle_mcp_non_stream` 返回体可能尚未带 `conversation_id`**（与显式 MCP 入口同理，后续在编排层对齐）。联调时请以实际 JSON 为准，或先用手动已知的 `conversation_id` 测历史接口。
+
+---
+
+## 最近一次学习（日期：2026-05-08）
+
+### 本次补充（`src/routers/chat/` 再拆分：观测、SSE、一轮准备）
+
+- **`pkg.py`**：单独存放 **`_chat_pkg()`**（惰性 `import src.routers.chat`），便于测试 monkeypatch 与避免循环 import。
+- **`events.py`**：事件与观测收口——**`_record_chat_event`**、builtin 被拒、流式 MCP/chat 记录、**`_stream_done_extra_for_mcp`** 等；**`build_mcp_event_payload`** 仍从 **`nl_utils`** 引用。
+- **`chat_turn.py`**：一轮内 planner 前后共用——**`FALLBACK_CHAT_META`**、**`_prepare_planner_user_turn`**、**`_unwrap_plan_result`**、**`_builtin_rejected_message`**；**`logic.py`** 仅从本模块导入上述符号。
+- **`sse.py`**：SSE 字符串与流式 MCP 工具（**`_sse_data`**、delta/done、**`_stream_mcp_tool`** 等）；**`logic.py`** 从本模块 import，编排与传输格式分层。
+- **`logic.py`**：保留 **`chat_endpoint`**、**`event_stream`**、非流式 **`_handle_*`**、**`_make_request_done_logger`** 等；路由与对外 URL 不变。
+- **字段命名**：流式 MCP 摘要等与 **`tool_succeeded`** 对齐（与 MCP client、事件模型一致）；**`_record_stream_mcp_event`** 文档说明返回 **`tool_succeeded`**。
+- **提交前自测**：聊天相关 **`pytest`** 需本机 **PostgreSQL / `DATABASE_URL` 可连**；未配库时出现连接类失败属环境原因，可先只跑不连库的用例或配好 `.env` 后再全量 **`pytest tests/`**。
 
 ---
 
@@ -380,7 +394,7 @@
 1. **前端（按需）**：**`myproject/frontend`** —— 继续 **阶段 3**（`http.ts` 错误分类、各 Query 错误态）；布局上已分 **左栏（Agent / 历史 / 任务）** 与 **右栏 `ChatPanel`**，待后端 **SSE** 后接流式 UI。规则见 **`frontend/.cursor/rules/frontend-study-plan.mdc`**。
 
 2. **后端（与「产品/架构共识」对齐）**
-   - **会话记忆（进行中）**：**`conversation` / `conversation_messages` 与 `/chat`、`/chat/stream` 落库** 已完成（见 **2026-05-04**）；**chat 路由** 已拆为 **`src/routers/chat/`** 包并做冗余收口（见 **2026-05-06**）。实现入口：**`logic.py`**（`chat_endpoint` / `event_stream`）、**`router.py`**（注册路由）；测试仍 **`import src.routers.chat as chat_module`** 做 monkeypatch。接下来优先：**`maybe_refine_memory`**（更新 `memory_summary`，精炼勿走 `append_message`）、**`.env.example` 增加 `MEMORY_*`**、全量 **`pytest tests/`** 回归。
+   - **会话记忆（进行中）**：**`conversation` / `conversation_messages` 与 `/chat`、`/chat/stream` 落库** 已完成（见 **2026-05-04**）；**chat 包** 内已分层：**`logic.py`**（`chat_endpoint` / `event_stream` 编排）、**`sse.py`**（流式拼装）、**`events.py`**（事件落库）、**`chat_turn.py`**（一轮准备与 planner 拆包）、**`pkg.py`**（**`_chat_pkg()`**）、**`router.py`**（注册路由）；详见 **2026-05-08**。测试仍 **`import src.routers.chat as chat_module`** 做 monkeypatch。可选下一步：抽出 **`non_stream.py`**（**`_handle_builtin_non_stream`** / **`_handle_mcp_non_stream`**，必要时迁入 **`chat_endpoint`**）。主线仍优先：**`maybe_refine_memory`**、**`.env.example` 增加 `MEMORY_*`**、配好 DB 后全量 **`pytest tests/`** 回归。
    - **文档助手与通用会话衔接**：`doc_sessions` 挂 **`conversation_id`**，复用 **`build_augmented_user_text`**；未完成的 **`doc_sessions` / `doc_session_messages` 表与路由** 仍按 **「支线：后端会话式文档生成」** 推进。
    - **`GET /events`**：已支持 **`page` / `limit` / `total`** 与 **`type` / `command` / `status`** 筛选（详见 **最近一次学习 2026-05-02**）；与 **`conversation_id` / `turn_id`** 联调左栏时间线。
    - **可选**：**`/agent/nl-run` 与会话记忆对齐**；**`GET /conversations/{id}/messages`** 拉纯聊天历史。

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.agent_service import run_tool
-from src.api_response import fail, ok
+from src.api_response import fail, success
 from src.db.deps import get_db
 from src.llm import get_llm_client
 from src.llm.agent_plan import PlanError
@@ -36,7 +36,7 @@ router = APIRouter(tags=["agent"])
 def _record_agent_event(
     type_: str,
     request_id: str,
-    ok: bool,
+    tool_succeeded: bool,
     summary: str,
     payload: dict[str, Any],
     plan_meta: dict[str, Any] | None = None,
@@ -46,7 +46,7 @@ def _record_agent_event(
         type_=type_,
         endpoint="/agent/nl-run",
         request_id=request_id,
-        ok=ok,
+        tool_succeeded=tool_succeeded,
         provider_used=meta.get("provider_used", "unknown"),
         fallback_used=bool(meta.get("fallback_used", False)),
         summary=summary,
@@ -57,9 +57,9 @@ def _record_agent_event(
 @router.post("/agent/run")
 def use_tool(body: AgentRunRequest):
     """执行结构化命令（前端直接传 text）。"""
-    ok_flag, msg, data = run_tool(body.text)
-    if ok_flag:
-        return ok(msg, data)
+    tool_succeeded, msg, data = run_tool(body.text)
+    if tool_succeeded:
+        return success(msg, data)
     return fail(msg)
 
 
@@ -88,14 +88,14 @@ def _run_mcp_tool(
             route="mcp",
             tool_name=tool_name,
             plan_meta=planner_meta,
-            ok_flag=False,
+            tool_succeeded=False,
             error_type="mcp_not_allowed",
             allowed=sorted_allowed,
         )
         _record_agent_event(
             type_="mcp",
             request_id=request_id,
-            ok=False,
+            tool_succeeded=False,
             summary=summary,
             payload=payload,
             plan_meta=planner_meta,
@@ -108,25 +108,25 @@ def _run_mcp_tool(
         )
 
     mcp_result = mcp_client.call_tool(tool_name, args)
-    if mcp_result.get("ok"):
+    if mcp_result.get("tool_succeeded"):
         result_data = mcp_result.get("data") or {}
         done("mcp", True, planner_meta)
         summary, payload = build_mcp_event_payload(
             route="mcp",
             tool_name=tool_name,
             plan_meta=planner_meta,
-            ok_flag=True,
+            tool_succeeded=True,
             result_data=result_data,
         )
         _record_agent_event(
             type_="mcp",
             request_id=request_id,
-            ok=True,
+            tool_succeeded=True,
             summary=summary,
             payload=payload,
             plan_meta=planner_meta,
         )
-        return ok(
+        return success(
             "执行成功",
             {
                 "route": "mcp",
@@ -147,14 +147,14 @@ def _run_mcp_tool(
         route="mcp",
         tool_name=tool_name,
         plan_meta=planner_meta,
-        ok_flag=False,
+        tool_succeeded=False,
         error_type="mcp_run_failed",
         detail=detail,
     )
     _record_agent_event(
         type_="mcp",
         request_id=request_id,
-        ok=False,
+        tool_succeeded=False,
         summary=summary,
         payload=payload,
         plan_meta=planner_meta,
@@ -174,7 +174,7 @@ def run_nl_command(body: AgentNlRunRequest):
 
     def _done(
         route_kind: str,
-        ok_flag: bool,
+        tool_succeeded: bool,
         planner_meta: dict | None = None,
         *,
         error: Exception | None = None,
@@ -186,7 +186,7 @@ def run_nl_command(body: AgentNlRunRequest):
             endpoint="/agent/nl-run",
             request_id=request_id,
             route_kind=route_kind,
-            ok=ok_flag,
+            tool_succeeded=tool_succeeded,
             plan_meta=planner_meta,
             error=error,
             extra=extra,
@@ -248,7 +248,7 @@ def run_nl_command(body: AgentNlRunRequest):
                     {"command": cmd, "planner_meta": planner_meta},
                 )
 
-            ok_flag, msg, data = run_tool(cmd)
+            tool_succeeded, msg, data = run_tool(cmd)
             resp_data = {
                 "command": cmd,
                 "result": data,
@@ -256,9 +256,9 @@ def run_nl_command(body: AgentNlRunRequest):
                 "planner_meta": planner_meta,
             }
 
-            if ok_flag:
+            if tool_succeeded:
                 _done("builtin", True, planner_meta)
-                return ok("执行成功", resp_data)
+                return success("执行成功", resp_data)
 
             _done(
                 "builtin",
@@ -318,8 +318,8 @@ def run_mcp_tool(body: dict):
 
     try:
         result = mcp_client.call_tool(tool_name, args)
-        if result.get("ok"):
-            return ok("执行成功", result.get("data"))
+        if result.get("tool_succeeded"):
+            return success("执行成功", result.get("data"))
         return _mcp_fail(
             result.get("msg", "执行失败"),
             tool_name=tool_name,
@@ -342,11 +342,11 @@ def get_last_step(db: Session = Depends(get_db)):
     data = {
         "tool_name": row.tool_name,
         "input_text": row.input_text,
-        "ok_flag": row.ok_flag,
+        "tool_succeeded": row.tool_succeeded,
         "msg": row.msg,
         "timestamp": format_step_ts_utc(row.timestamp),
     }
-    return ok("查询成功", data)
+    return success("查询成功", data)
 
 
 @router.get("/agent/steps")
@@ -361,7 +361,7 @@ def get_steps(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db
         {
             "tool_name": r.tool_name,
             "input_text": r.input_text,
-            "ok_flag": r.ok_flag,
+            "tool_succeeded": r.tool_succeeded,
             "msg": r.msg,
             "timestamp": format_step_ts_utc(r.timestamp),
         }
@@ -369,4 +369,4 @@ def get_steps(limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db
     ]
     if not data:
         return fail("暂无操作历史", [])
-    return ok("查询成功", data)
+    return success("查询成功", data)

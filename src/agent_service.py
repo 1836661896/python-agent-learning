@@ -7,8 +7,8 @@
     - ``run_tool`` 作为 API 统一入口，供 ``/agent/run`` 与 ``/agent/nl-run`` 调用。
 
 约定：
-    - 工具统一返回 ``(ok: bool, msg: str, data: Any)``；
-    - ``ok`` 为 False 时由 API 返回失败消息；为 True 时由 API 包装 ``data`` 返回前端。
+    - 工具统一返回 ``(tool_succeeded: bool, msg: str, data: Any)``；
+    - ``tool_succeeded`` 为 False 时由 API 返回失败消息；为 True 时由 API 包装 ``data`` 返回前端。
 """
 
 from __future__ import annotations
@@ -65,14 +65,14 @@ class Step:
 
     tool_name: str
     input_text: str
-    ok_flag: bool
+    tool_succeeded: bool
     msg: str
     timestamp: str
 
 
 def format_step(step: Step) -> str:
     return (
-        f"调用{step.tool_name} 执行{step.input_text}，执行结果：{step.ok_flag}，"
+        f"调用{step.tool_name} 执行{step.input_text}，执行结果：{step.tool_succeeded}，"
         f"返回信息：{step.msg}；执行时间：{step.timestamp}"
     )
 
@@ -86,7 +86,7 @@ def _record_step(agent: "Agent", step: Step) -> None:
             agent_step = AgentStep(
                 tool_name=step.tool_name,
                 input_text=step.input_text,
-                ok_flag=step.ok_flag,
+                tool_succeeded=step.tool_succeeded,
                 msg=step.msg,
             )
             db.add(agent_step)
@@ -115,25 +115,25 @@ class Agent:
             step = Step(
                 tool_name=tool.name,
                 input_text=text,
-                ok_flag=False,
+                tool_succeeded=False,
                 msg="",
                 timestamp="",
             )
             if tool.match(text):
-                ok_flag, msg, data = tool.run(text)
-                step.ok_flag = ok_flag
+                tool_succeeded, msg, data = tool.run(text)
+                step.tool_succeeded = tool_succeeded
                 step.msg = msg
                 step.timestamp = format_step_ts_utc(datetime.now(timezone.utc))
                 _record_step(self, step)
                 logger.info(format_step(step))
-                return ok_flag, msg, data
+                return tool_succeeded, msg, data
 
         _record_step(
             self,
             Step(
                 tool_name="unknown",
                 input_text=text,
-                ok_flag=False,
+                tool_succeeded=False,
                 msg="未知命令",
                 timestamp=format_step_ts_utc(datetime.now(timezone.utc)),
             ),
@@ -178,7 +178,7 @@ def tool_list(cmd: str) -> tuple[bool, str, Any]:
             .all()
         )
         data = [{"task_id": r.task_id, "task_name": r.task_name} for r in rows]
-        return True, "ok", data
+        return True, "任务列表获取成功", data
 
 
 def tool_add(cmd: str) -> tuple[bool, str, Any]:
@@ -198,7 +198,7 @@ def tool_add(cmd: str) -> tuple[bool, str, Any]:
         db.add(task)
         db.commit()
         db.refresh(task)
-        return True, "添加成功", {"task_id": task.task_id, "task_name": task.task_name}
+        return True, "任务添加成功", {"task_id": task.task_id, "task_name": task.task_name}
 
 
 def tool_delete(cmd: str) -> tuple[bool, str, Any]:
@@ -218,27 +218,27 @@ def tool_delete(cmd: str) -> tuple[bool, str, Any]:
             return False, "未找到任务", None
         db.delete(task)
         db.commit()
-        return True, "删除任务成功", None
+        return True, "任务删除成功", None
 
 
 def tool_echo(cmd: str) -> tuple[bool, str, Any]:
     echo_content = adjust_command(cmd)
     if not echo_content:
         return False, "未输入回显内容", None
-    return True, "ok", echo_content
+    return True, "回显内容获取成功", echo_content
 
 
 def tool_time(cmd: str) -> tuple[bool, str, Any]:
     now = format_step_ts_utc(datetime.now(timezone.utc))
-    return True, "ok", now
+    return True, "当前时间获取成功", now
 
 
 def tool_help(cmd: str) -> tuple[bool, str, Any]:
-    return True, "ok", HELP_MESSAGE
+    return True, "帮助信息获取成功", HELP_MESSAGE
 
 
 def tool_version(cmd: str) -> tuple[bool, str, Any]:
-    return True, "ok", APP_VERSION
+    return True, "版本信息获取成功", APP_VERSION
 
 
 TOOLS: list[Tool] = [
@@ -254,6 +254,6 @@ TOOLS: list[Tool] = [
 AGENT = Agent(tools=TOOLS)
 
 
-def run_tool(command: str) -> tuple[bool, str, Any]:
+def run_tool(command: str) -> tuple[bool, str, dict | None]:
     """API 统一入口。"""
     return AGENT.run_text(command)

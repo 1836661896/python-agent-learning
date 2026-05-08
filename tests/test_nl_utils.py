@@ -43,10 +43,10 @@ def test_build_mcp_event_payload_success():
         route="mcp",
         tool_name="echo",
         plan_meta={"provider_used": "ollama"},
-        ok_flag=True,
+        tool_succeeded=True,
         result_data={"text": "hi"},
     )
-    assert summary == "mcp success: echo"
+    assert summary == "mcp 执行成功: echo"
     assert payload["route"] == "mcp"
     assert payload["tool_name"] == "echo"
     assert payload["result"] == {"text": "hi"}
@@ -57,11 +57,11 @@ def test_build_mcp_event_payload_fail_with_allowed():
         route="mcp",
         tool_name="echo",
         plan_meta={"provider_used": "manual_mcp"},
-        ok_flag=False,
+        tool_succeeded=False,
         error_type="mcp_not_allowed",
         allowed=["ping", "now"],
     )
-    assert summary == "mcp failed"
+    assert summary == "mcp 执行失败"
     assert payload["error_type"] == "mcp_not_allowed"
     assert payload["allowed"] == ["ping", "now"]
 
@@ -84,11 +84,11 @@ def test_build_builtin_event_payload_success():
     summary, payload = build_builtin_event_payload(
         cmd="time",
         plan_meta={"provider_used": "ollama"},
-        ok_flag=True,
-        tool_msg="ok",
+        tool_succeeded=True,
+        tool_msg="success",
         data="2026-01-01 00:00:00 UTC",
     )
-    assert summary == "builtin success: time"
+    assert summary == "builtin 执行成功: time"
     assert payload["route"] == "builtin"
     assert payload["command"] == "time"
     assert payload["result"] == "2026-01-01 00:00:00 UTC"
@@ -98,11 +98,11 @@ def test_build_builtin_event_payload_fail():
     summary, payload = build_builtin_event_payload(
         cmd="time",
         plan_meta={"provider_used": "ollama"},
-        ok_flag=False,
+        tool_succeeded=False,
         tool_msg="boom",
         data=None,
     )
-    assert summary == "builtin failed: time"
+    assert summary == "builtin 执行失败: time"
     assert payload["error_type"] == "builtin_run_failed"
 
 

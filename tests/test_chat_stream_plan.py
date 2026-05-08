@@ -117,6 +117,6 @@ def test_chat_stream_plan_builtin_rejected_records_event(client, monkeypatch):
 
     assert captured["type_"] == "builtin"
     assert captured["endpoint"] == "/chat/stream"
-    assert captured["ok"] is False
+    assert captured["tool_succeeded"] is False
     assert captured["summary"] == "builtin rejected"
     assert captured["payload"]["error_type"] == "command_not_allowed"

@@ -34,7 +34,7 @@ def log_done(
     endpoint: str,
     request_id: str,
     route_kind: str,
-    ok: bool,
+    tool_succeeded: bool,
     plan_meta: dict[str, Any] | None = None,
     level: str | None = None,
     error: Exception | None = None,
@@ -47,7 +47,7 @@ def log_done(
     - endpoint: 例如 "/chat" / "/agent/nl-run" / "/chat/stream"
     - route_kind: 例如 "mcp" / "builtin" / "chat" / "runtime_error"
     - plan_meta: planner_meta，用于抽取 provider_used/fallback_used
-    - level: 不传则 ok=True->info，ok=False->warning（若 error 存在则 error）
+    - level: 不传则 tool_succeeded=True->info，tool_succeeded=False->warning（若 error 存在则 error）
     - error: 若传入，会附加 error_type/error_msg
     - extra: 附加字段（会 merge 进 payload）
     """
@@ -55,7 +55,7 @@ def log_done(
         "request_id": request_id,
         "endpoint": endpoint,
         "route_kind": route_kind,
-        "ok": ok,
+        "tool_succeeded": tool_succeeded,
         **_meta_from_plan_meta(plan_meta),
     }
 
@@ -67,7 +67,7 @@ def log_done(
         payload.update(extra)
 
     if level is None:
-        if ok:
+        if tool_succeeded:
             level = "info"
         else:
             level = "error" if error is not None else "warning"

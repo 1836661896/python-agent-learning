@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.api_response import fail, ok
+from src.api_response import fail, success
 from src.mcp import MCPClient
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -25,13 +25,13 @@ mcp_client = MCPClient()
 @router.get("/health")
 def mcp_health():
     """MCP 子系统健康检查"""
-    return ok("ok", {"ready": mcp_client.is_ready()})
+    return success("MCP 子系统健康检查成功", {"ready": mcp_client.is_ready()})
 
 
 @router.get("/tools")
 def mcp_tools():
     """查看当前 MCP 可用工具（当前占位会实现返回空列表）"""
-    return ok("ok", mcp_client.list_tools())
+    return success("MCP 可用工具查询成功", mcp_client.list_tools())
 
 
 @router.post("/call")
@@ -58,8 +58,8 @@ def mcp_call(body: dict):
 
     try:
         result = mcp_client.call_tool(tool_name, args)
-        if result.get("ok"):
-            return ok("ok", result.get("data"))
+        if result.get("tool_succeeded"):
+            return success("MCP 工具调用成功", result.get("data"))
         return fail(result.get("msg", "调用失败"), result.get("data"))
     except Exception as e:
         return _mcp_fail("MCP 调用异常", tool_name=tool_name, detail=str(e))

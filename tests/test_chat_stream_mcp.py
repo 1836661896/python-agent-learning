@@ -7,14 +7,14 @@ def _fake_call_tool(tool_name: str, args: dict):
     """与 src/mcp/client.py 里 call_tool 成功时返回形状一致"""
     if tool_name == "echo" and args == {"text": "hi"}:
         return {
-            "ok": True,
-            "msg": "ok",
+            "tool_succeeded": True,
+            "msg": "success",
             "data": {
                 "text": "hi",
                 "structured": {"result": "hi"},
             },
         }
-    return {"ok": False, "msg": "unexpected", "data": {}}
+    return {"tool_succeeded": False, "msg": "unexpected", "data": {}}
 
 
 def test_chat_stream_mcp_echo_sse_order(client, monkeypatch):
@@ -100,7 +100,7 @@ def test_chat_stream_mcp_not_allowed_records_event(client, monkeypatch):
     # 4) 断言事件字段（这是本测试核心）
     assert captured["type_"] == "mcp"
     assert captured["endpoint"] == "/chat/stream"
-    assert captured["ok"] is False
+    assert captured["tool_succeeded"] is False
     assert captured["summary"] == "mcp failed"
     assert captured["provider_used"] == "manual_mcp"
     assert captured["fallback_used"] is False
@@ -148,7 +148,7 @@ def test_chat_stream_mcp_run_failed_records_event(client, monkeypatch):
     # 5) 断言事件
     assert captured["type_"] == "mcp"
     assert captured["endpoint"] == "/chat/stream"
-    assert captured["ok"] is False
+    assert captured["tool_succeeded"] is False
     assert captured["summary"] == "mcp failed"
     assert captured["provider_used"] == "manual_mcp"
     assert captured["fallback_used"] is False
