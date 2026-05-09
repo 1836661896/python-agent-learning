@@ -225,11 +225,7 @@ alwaysApply: true
 
 ## 当前进度与下一步（与 readme 同步）
 
-- **已完成（以 readme 为准）**：阶段 0～8 关键能力已具备；后端已完成服务化结构收口（`agent_service` + `routers` + `schemas` 分层）、核心接口稳定、测试通过；已具备 **`POST /chat`**、**`POST /agent/nl-run`** 等 LLM 相关路由。
-- **建议下一步（主线，2026-04-09 起与 readme「产品/架构共识」对齐）**：
-  1. **前端**：阶段 3（请求层与错误体验）；页面已分 **左栏（Agent / 步骤 / 任务）** 与 **右栏聊天**，后续接后端 **流式**（见 `frontend/readme.md`）。
-  2. **后端（优先于或并行于鉴权预研）**：**流式聊天（SSE/WebSocket）**；**统一操作/活动记录**（区分聊天、任务、工具等，`type` + `turn_id`，分页）；**分级路由**可渐进实现（一级结构化下发 → 二级专职模块 + 工具白名单），与现有 **`run_tool`** 复用。
-  3. **阶段 9（鉴权与安全）**：流式与工具对外暴露前评估；再按需阶段 10（异步任务与缓存）。
-  4. 支线 **R1/R2**、**云端 LLM 可切换** 可按需插入，不阻断主线。
-- **readme 使用**：每次提交前更新 readme 的「最近一次学习」与「下一次学习的起点」，与本节阶段描述保持一致；**架构共识**见 **`readme.md` →「产品/架构共识（2026-04-09）」**。
-- **新对话 / 换设备**：助手应先阅读 `readme.md` 与本文件、`python-learning-checklist.mdc`，确认当前阶段与清单状态后，再按「建议下一步」继续教学。
+- **已完成（以根目录 `readme.md` §2.1 为准）**：阶段 0～8 关键能力已具备；数据库 + ORM + 迁移；**`/chat` / `/chat/stream`（SSE）**、planner、MCP、**会话记忆**、**`GET /events`**、**doc-sessions 支线**、Docker compose、多提供商 LLM 等 — **具体接口表与日期见 `readme.md`**。
+- **建议下一步**：见 **`readme.md` → §7 下一次学习的起点**（当前主线含：非流式 chat→MCP 补齐 **`conversation_id`/`turn_id`**、前端阶段 3+SSE、doc_sessions 与通用会话衔接等）。
+- **readme 使用**：每次提交前更新 **`readme.md` §6 变更记录** 与 **§7**；产品边界见 **`readme.md` §2.3**。
+- **新对话 / 换设备**：先读 **`readme.md`**、本文件、**`python-learning-checklist.mdc`**、**`user-profile.mdc`**。

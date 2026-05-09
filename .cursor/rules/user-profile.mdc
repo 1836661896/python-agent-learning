@@ -35,8 +35,8 @@ alwaysApply: true
 ## 项目与进度（随学习更新）
 
 - **项目性质**：学习项目；首要目标是**学会**，其次才是完成功能。
-- **当前进度**：后端已完成服务化重构（`src/agent_service.py`、`src/routers/*`、`src/schemas/*`、统一响应层 `src/api_response.py`），接口 `health/tasks/agent/chat`、`agent/nl-run` 等可稳定供前端调用；`pytest` 以仓库现状为准。前端已 **左栏 + 右栏 `ChatPanel`** 布局并联调上述接口（详见 **`frontend/readme.md`**）。
-- **近期目标（2026-04-09 共识，详见 `backend/readme.md`）**：后端侧重 **聊天流式（SSE 等）**、**左侧统一操作记录（按 type 区分聊天/任务/工具）**、**大模型分级路由（渐进）**；合规上不以「外网搬运视频到 B 站/抖音」为项目目标。前端继续 **阶段 3** 并预留流式消费；**鉴权（阶段 9）** 在流式/工具对外前评估。
+- **当前进度**：后端为 **FastAPI 装配 + 多路由**（`src/api.py` 挂载 **tasks / agent / chat / mcp / events / doc_sessions / conversations**）；**PostgreSQL + Alembic**；**`/chat` 与 `/chat/stream`（SSE）**、planner（mcp/builtin/chat）、**会话与 `conversation_messages`**、**`GET /events` 分页筛选**、**文档支线 doc-sessions**；**`pytest`** 覆盖核心路径。前端 **左栏 + 右栏 `ChatPanel`** 与上述 API 联调（详见 **`frontend/readme.md`**）。细节与变更以 **根目录 `readme.md`** 为准。
+- **近期目标（与根目录 `readme.md` §2、§7 同步）**：补齐 **非流式 `POST /chat` → MCP** 响应中的 **`conversation_id` / `turn_id`**；**左侧 `GET /events` 时间线**与 **`turn_id` 联调**；右侧 **SSE** 与前端阶段 3+ 衔接；**`doc_sessions` 与通用会话**渐进；**分级路由**与 **阶段 9 鉴权**按需评估。合规边界见 `readme.md` §2.3。
 - **前端**：**React**（`myproject/frontend`），与后端 API 联调；进度见 **`frontend/readme.md`**。
 - **多设备/新对话**：会换设备或新开 Cursor 窗口；依赖 **readme**、**study-plan**、**checklist** 同步进度；希望助手在新对话时先读这三份再继续。
 
@@ -60,11 +60,11 @@ alwaysApply: true
 
 ## 已接触的概念（随学习增补）
 
-- Python：变量与作用域、list/dict、控制流、函数与参数、字符串方法（split/join/strip/startswith）、enumerate、datetime、import 与模块、try/except、raise、logging、json、文件 with open、FastAPI、Pydantic（BaseModel、Field、field_validator）、classmethod、dataclass 提及。
+- Python：变量与作用域、list/dict、控制流、函数与参数、字符串方法（split/join/strip/startswith）、enumerate、datetime、import 与模块、try/except、raise、logging、json、文件 with open、FastAPI、Pydantic（BaseModel、Field、field_validator）、classmethod、dataclass 提及；项目中已接触 **SQLAlchemy ORM**、**Alembic**、**pytest / TestClient**、**SSE（流式响应）**、**httpx**（调用 Ollama 等）。
 - 与 JS/TS 的类比：interface ↔ BaseModel、throw ↔ raise、catch ↔ except、类型与运行时校验。
 
 ---
 
 ## 技术环境（若已知）
 
-- 当前工作路径含 `backend`，核心结构包含 `src/main.py`、`src/api.py`、`src/agent_service.py`、`src/routers/`、`src/schemas/`、`.venv`、`readme.md` 等；具体 OS/Shell 以用户实际环境为准，换设备后可能变化。
+- 仓库根目录含 **`src/`**（`api.py`、`agent_service.py`、`routers/`、`schemas/`、`llm/`、`models/`、`services/` 等）、**`.venv`**、**根目录 `readme.md`**；具体 OS/Shell 以用户实际环境为准，换设备后可能变化。

@@ -25,7 +25,7 @@ alwaysApply: true
 | **字典 dict** | | |
 | 创建、访问 d[key]、d.get(key[, default]) | [已学] | HELP_MESSAGE, SYSTEM_MESSAGE |
 | d.keys() / d.values() / d.items() | [已学] | handle_help 遍历 |
-| 修改、del d[key]、key in d | [未学] | |
+| 修改、del d[key]、key in d | [已学] | 路由与 payload 判断等 |
 | **其他类型** | | |
 | 元组 tuple | [未学] | |
 | 集合 set | [未学] | |
@@ -42,7 +42,7 @@ alwaysApply: true
 | 算术运算符 + - * / // % ** | [未学] | |
 | 比较运算符 == != < > <= >= | [已学] | 控制流、条件判断中已用 |
 | 逻辑运算符 and, or, not | [已学] | 条件组合 |
-| 成员运算符 in | [未学] | |
+| 成员运算符 in | [已学] | 命令解析、配置键、集合判断 |
 | 身份运算符 is / is not | [未学] | |
 | 条件表达式（三元） x if cond else y | [未学] | |
 
@@ -108,7 +108,7 @@ alwaysApply: true
 | **输入输出** | | |
 | print() / input() | [已学] | 主循环、提示 |
 | **类型与转换** | | |
-| int() / float() / str() / list() / dict() / tuple() / set() / bool() | [未学] | |
+| int() / float() / str() / list() / dict() / tuple() / set() / bool() | [已学] | 查询参数、JSON、模型字段转换 |
 | **序列与迭代** | | |
 | len() | [已学] | 列表、字符串长度等 |
 | range(stop) / range(start, stop[, step]) | [已学] | for 循环 |
@@ -118,7 +118,7 @@ alwaysApply: true
 | **其他常用** | | |
 | min() / max() / sum() / abs() / round() | [未学] | |
 | type(x) / isinstance(x, Type) | [未学] | 类型检查 |
-| open() 打开文件 | [未学] | 与 文件与 IO 一起讲 |
+| open() 打开文件 | [已学] | 与 §8 `with open` 一致；历史 tasks.json |
 | iter() / next() | [未学] | 迭代器 |
 
 ---
@@ -127,8 +127,8 @@ alwaysApply: true
 
 | 知识点 | 状态 | 备注 |
 |--------|------|------|
-| import 与 from ... import | [已学] | main.py 从 commands 导入 show_message, handle_command |
-| __init__.py 与包结构 | [未学] | basics 已有，可讲 |
+| import 与 from ... import | [已学] | `api.py`、`routers`、`services` 等 |
+| __init__.py 与包结构 | [已学] | `src/routers/chat/` 包、`schemas/__init__.py` |
 | 相对导入 . / .. | [未学] | |
 
 ---
@@ -138,9 +138,9 @@ alwaysApply: true
 | 知识点 | 状态 | 备注 |
 |--------|------|------|
 | try / except 基本语法 | [已学] | commands/api 中的 try/except；并补充 FastAPI 异常处理器 |
-| 捕获特定异常类型 | [未学] | |
+| 捕获特定异常类型 | [已学] | FastAPI `HTTPException` / `RequestValidationError` 处理器等 |
 | else / finally 子句 | [未学] | |
-| raise 抛出异常 | [未学] | |
+| raise 抛出异常 | [已学] | Pydantic `field_validator` 中 `raise ValueError` 等 |
 
 ---
 
@@ -150,7 +150,7 @@ alwaysApply: true
 |--------|------|------|
 | open / read / write / close | [已学] | 任务持久化：with open 读/写 tasks.json |
 | with 上下文管理器 | [已学] | 同上 |
-| 路径 pathlib 或 os.path | [未学] | |
+| 路径 pathlib 或 os.path | [已学] | `doc_sessions` 等使用 `pathlib.Path` |
 
 ---
 
@@ -161,7 +161,7 @@ alwaysApply: true
 | **系统与路径** | | |
 | os（环境变量、当前目录、路径拼接、执行命令） | [未学] | |
 | sys（argv、stdin/stdout、exit、版本） | [未学] | |
-| pathlib.Path（面向对象路径操作） | [未学] | 推荐替代 os.path |
+| pathlib.Path（面向对象路径操作） | [已学] | 文档生成路径等 |
 | **数据与文本** | | |
 | json（loads / dumps 序列化与反序列化） | [已学] | 任务持久化：loads 读入、dumps 写入 |
 | re（正则表达式：match、search、findall、sub） | [未学] | 文本匹配与提取 |
@@ -182,11 +182,14 @@ alwaysApply: true
 | 知识点 | 状态 | 备注 |
 |--------|------|------|
 | **Web 与 API** | | |
-| FastAPI / Flask（Web 框架、写 API） | [已学] | src/api.py：GET /health、POST /tasks |
-| requests（发 HTTP 请求、调外部 API） | [未学] | |
+| FastAPI / Flask（Web 框架、写 API） | [已学] | `src/api.py` 与各 `routers` |
+| httpx（异步/同步 HTTP 客户端） | [已学] | `ollama_client` 等调用本地/远端 API |
+| SQLAlchemy 2.x（ORM、Session） | [已学] | `src/models/`、`db/session`、`Depends(get_db)` |
+| Alembic（数据库迁移） | [已学] | `alembic/`、`alembic upgrade head` |
+| requests（发 HTTP 请求、调外部 API） | [未学] | 与 httpx 二选一教学即可 |
 | **配置与测试** | | |
-| python-dotenv（读 .env 配置） | [未学] | |
-| pytest（单元测试、用例组织） | [未学] | 工程化阶段 |
+| python-dotenv（读 .env 配置） | [已学] | `DATABASE_URL`、`OLLAMA_*` 等 |
+| pytest（单元测试、用例组织） | [已学] | `tests/`、`TestClient`、mock planner/LLM |
 | **自动化与视觉（项目后期）** | | |
 | pyautogui / pygetwindow（键鼠、窗口） | [未学] | 阶段 B/C |
 | Pillow / OpenCV（图像处理、识别） | [未学] | 阶段 C |
@@ -200,9 +203,9 @@ alwaysApply: true
 | 知识点 | 状态 | 备注 |
 |--------|------|------|
 | 虚拟环境 venv | [已学] | 已创建 .venv |
-| requirements.txt | [已学] | 已创建（阶段 2b），阶段 3 将加入 fastapi、uvicorn |
-| 项目结构与命名规范 | [进行中] | src、main 等已用 |
-| pip install / 依赖管理 | [未学] | |
+| requirements.txt | [已学] | 含 FastAPI、uvicorn、SQLAlchemy、pytest、httpx 等 |
+| 项目结构与命名规范 | [已学] | `src/routers/` 分包、`schemas/`、`services/`、`llm/` |
+| pip install / 依赖管理 | [已学] | `requirements.txt`、虚拟环境 |
 
 ---
 
