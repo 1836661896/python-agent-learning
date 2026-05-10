@@ -2,16 +2,8 @@
 
 
 def success(msg: str, data=None):
-    return {
-        "code": 0,
-        "data": data,
-        "msg": msg,
-    }
+    return {"code": 0, "data": data, "msg": msg}
 
 
 def fail(msg: str, data=None):
-    return {
-        "code": 1,
-        "data": data,
-        "msg": msg,
-    }
+    return {"code": 1, "data": data, "msg": msg}

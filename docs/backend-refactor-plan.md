@@ -6,8 +6,12 @@
 
 **关联文档**：
 
+- 文档分工总览：[**`documentation-index.md`**](./documentation-index.md)
+- 中长期产品目标：[**`project-goals.md`**](./project-goals.md)
+- 详细变更流水：[**`changelog.md`**](./changelog.md)
+- 重构工程共识：[**`product-and-refactor-vision.md`**](./product-and-refactor-vision.md)
 - 目标目录树（长期）：[`expected-directory-structure.md`](./expected-directory-structure.md)
-- 仓库功能总览与对外接口：`readme.md`
+- 当前实现与模块状态：仓库根 [**`readme.md`**](../readme.md)
 
 ---
 
@@ -87,7 +91,7 @@
 | **R4** | 移除 **`tasks` 路由**、`schemas/tasks`、`models/task`（若删模型则在 §8 写明清库策略）；**删除 `agent_service.py`** | `api.py` 不再 include tasks；无残余 import |
 | **R5** | 精简 **`nl_utils`**（删 builtin 相关函数）；删除 **`intent.py`**（若未引用） | `grep builtin`、`grep run_tool`、`grep TaskModel` 仓库根目录自查干净 |
 | **R6** | **测试**：删改 `test_tasks_api.py`、`test_agent_api.py`、builtin 相关 chat/stream/nl_run/agent_plan 用例 | `pytest` 通过 |
-| **R7** | **文档**：更新 `readme.md` §2 功能表（去掉 tasks、agent/run、planner builtin）；本节 §7 打勾 | 新会话读后不因陈旧描述误判 |
+| **R7** | **文档**：更新 `readme.md` **§3 功能模块表**（去掉 tasks、agent/run、planner builtin）；同步 **`docs/changelog.md`**；本节 §7 打勾 | 新会话读后不因陈旧描述误判 |
 
 ---
 
@@ -171,7 +175,7 @@
 
 ## 9. 给助手（新对话）的读取说明
 
-开场请先读：`readme.md` → **本文件** → `.cursor/rules/python-study-plan.mdc` → `user-profile.mdc`。  
+开场请先读：`readme.md` → **`docs/documentation-index.md`** → **本文件** → `.cursor/rules/python-study-plan.mdc` → `user-profile.mdc`。  
 若用户说「后端重构」，以 **§7 进度记录** 为准接着指导；**不要假设前端同步完成**。  
 用户本地执行改动时，助手默认**不直接改 `.py`**（除非用户当次写明「本次允许修改代码」）。
 

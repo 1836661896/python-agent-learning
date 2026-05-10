@@ -1,17 +1,6 @@
-from .Conversation import Conversation
-from .ConversationMessages import ConversationMessages
-from .DocSession import DocSession
-from .DocSessionMessages import DocSessionMessages
-from .event import EventModel
-from .step import AgentStep
-from .task import TaskModel
+from src.db.base import Base
 
-__all__ = [
-    "TaskModel",
-    "AgentStep",
-    "EventModel",
-    "DocSession",
-    "DocSessionMessages",
-    "Conversation",
-    "ConversationMessages",
-]
+from .conversation import Conversation
+from .conversation_messages import ConversationMessage
+
+__all__ = ["Conversation", "ConversationMessage"]

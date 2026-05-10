@@ -1,30 +1,25 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
 
-from src.db.deps import get_db
 from src.db.session import SessionLocal
 from src.schemas import ChatRequest
-from src.utils.obs_log import new_request_id
-
-from .logic import chat_endpoint, event_stream
+from src.services.chat_stream import stream_chat_turn
 
 router = APIRouter(tags=["chat"])
 
 
-@router.post("/chat")
-def chat(body: ChatRequest, db: Session = Depends(get_db)):
-    """非流式聊天：复用 planner 决策，返回文本 + planner_meta。"""
-    return chat_endpoint(body, db)
-
-
 @router.post("/chat/stream")
-def chat_with_stream(body: ChatRequest):
-    """SSE：多行 data：JSON；type 为 delta / done / error。"""
-    request_id = new_request_id()
+def chat_stream(body: ChatRequest):
     db = SessionLocal()
+
+    def gen():
+        try:
+            yield from stream_chat_turn(body, db)
+        finally:
+            db.close()
+
     return StreamingResponse(
-        event_stream(body, request_id, db),
+        gen(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

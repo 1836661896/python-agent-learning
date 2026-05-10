@@ -10,6 +10,7 @@ alwaysApply: true
 > - **进度或环境变化**（如完成某阶段、换设备、前端项目启动）；
 > - 用户**纠正**助手的做法（如「你不要直接改代码」）→ 将纠正内容沉淀到画像；
 > - 多次出现同类**提问或关注点**（如爱问「等价吗」「和 xx 的区别」）→ 可归纳进「已接触的概念」或「教学建议」。
+> - 助手更新了**根目录 `readme.md` 或 `docs/` 下规划类文档**（索引、目标、changelog、协作规则等）且可能影响**如何配合用户**时 → 检查本画像是否需补一句（例如文档分工、提交习惯、是否允许改代码的重申）。
 
 ---
 
@@ -28,17 +29,18 @@ alwaysApply: true
   - **项目驱动**：不喜欢纯练习、无实际应用的语法练习；希望知识点在完善项目的各步骤中**按需、分散**引入，不要某一天集中练完一整类方法。
   - **理解优先**：会追问「为什么」「等价吗」「怎么用」（如 `if not description` 与 `if description == ""`、`classmethod` 是什么、`raise` 是否专用词）。
   - **节奏自控**：会主动「暂停」「继续学习」；完成一步后会说「好了」「第一步好了」再接下一步。
-  - **文档维护偏好**：希望助手在每次学习结束后自动决定并更新 `readme.md` 与相关学习文档，不需要每次单独提醒或征求确认。
+  - **文档维护偏好**：希望助手在每次学习结束后自动决定并更新 **`readme.md`**（当前架构与模块实现度）与 **`docs/changelog.md`**（变更流水）；**`docs/project-goals.md`** 仅在目标变化时改。文档分工见 **`docs/documentation-index.md`**。不需要每次单独提醒或征求确认。
 
 ---
 
 ## 项目与进度（随学习更新）
 
 - **项目性质**：学习项目；首要目标是**学会**，其次才是完成功能。
-- **当前进度**：后端为 **FastAPI 装配 + 多路由**（`src/api.py` 挂载 **tasks / agent / chat / mcp / events / doc_sessions / conversations**）；**PostgreSQL + Alembic**；**`/chat` 与 `/chat/stream`（SSE）**、planner（mcp/builtin/chat）、**会话与 `conversation_messages`**、**`GET /events` 分页筛选**、**文档支线 doc-sessions**；**`pytest`** 覆盖核心路径。前端 **左栏 + 右栏 `ChatPanel`** 与上述 API 联调（详见 **`frontend/readme.md`**）。细节与变更以 **根目录 `readme.md`** 为准。
-- **近期目标（与根目录 `readme.md` §2、§7 同步）**：补齐 **非流式 `POST /chat` → MCP** 响应中的 **`conversation_id` / `turn_id`**；**左侧 `GET /events` 时间线**与 **`turn_id` 联调**；右侧 **SSE** 与前端阶段 3+ 衔接；**`doc_sessions` 与通用会话**渐进；**分级路由**与 **阶段 9 鉴权**按需评估。合规边界见 `readme.md` §2.3。
+- **当前进度**：后端为 **FastAPI 装配 + 多路由**（`src/api.py` 挂载 **tasks / agent / chat / mcp / events / doc_sessions / conversations**）；**PostgreSQL + Alembic**；**`/chat` 与 `/chat/stream`（SSE）**、planner（mcp/builtin/chat）、**会话与 `conversation_messages`**、**`GET /events` 分页筛选**、**文档支线 doc-sessions**；**`pytest`** 覆盖核心路径。前端 **左栏 + 右栏 `ChatPanel`** 与上述 API 联调（详见 **`frontend/readme.md`**）。**实现程度与目录**以根目录 **`readme.md` §3** 为准；**变更流水**见 **`docs/changelog.md`**；**中长期目标**见 **`docs/project-goals.md`**。
+- **近期目标（与 `readme.md` §7、`docs/project-goals.md` 同步）**：补齐 **非流式 `POST /chat` → MCP** 响应中的 **`conversation_id` / `turn_id`**；**左侧 `GET /events` 时间线**与 **`turn_id` 联调**；右侧 **SSE** 与前端阶段 3+ 衔接；**`doc_sessions` 与通用会话**渐进；**分级路由**与 **阶段 9 鉴权**按需评估。合规提示见 **`readme.md` §3.1** 与 **`docs/project-goals.md`**。
 - **前端**：**React**（`myproject/frontend`），与后端 API 联调；进度见 **`frontend/readme.md`**。
-- **多设备/新对话**：会换设备或新开 Cursor 窗口；依赖 **readme**、**study-plan**、**checklist** 同步进度；希望助手在新对话时先读这三份再继续。
+- **多设备/新对话**：会换设备或新开 Cursor 窗口；依赖 **`readme.md`**、**`docs/documentation-index.md`**、**`study-plan`**、**`checklist`** 同步进度；希望助手在新对话时先读上述文档再继续。
+- **文档体系（2026-05-09）**：用户要求区分 **readme（当前真相）** / **changelog（详细变更）** / **project-goals（目标、少改）** / **`.cursor/rules`（助手硬规则）** / **`docs/collaboration-and-coding-rules.md`（人类可读摘要）** / **本画像**；并要求助手在**修改规划类文档后及时更新对用户的理解**。
 
 ---
 

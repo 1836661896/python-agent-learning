@@ -1,15 +1,17 @@
-"""Chat 相关请求模型。"""
-
 from pydantic import BaseModel, Field, field_validator
+
+from src.types import RoutingMode
 
 
 class ChatRequest(BaseModel):
-    """聊天请求体。"""
+    """聊天会话请求体。"""
 
-    message: str = Field(..., description="发给模型的内容")
+    message: str = Field(..., description="消息内容")
     conversation_id: int | None = Field(
-        default=None,
-        description="会话 ID：不传则服务端新建并在响应中返回",
+        default=None, description="会话id,若没有传则自动生成。"
+    )
+    routing: RoutingMode = Field(
+        default="auto", description="auto=自动判别：chat/plan/mcp=强制走对应链路"
     )
 
     @field_validator("message")

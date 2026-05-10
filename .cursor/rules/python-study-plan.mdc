@@ -3,7 +3,7 @@ description: Python 学习路线与项目推进计划（按难易排序，与 py
 alwaysApply: true
 ---
 
-**文档关系**：本文件定义阶段顺序与每阶段功能；`readme.md` 记录当前进度与「下一次学习的起点」；`python-learning-checklist.mdc` 记录各知识点的未学/进行中/已学状态。新对话时先读 readme + 本文件 + checklist，即可接上用户需求与当前进度。
+**文档关系**：本文件定义阶段顺序与每阶段功能；根目录 **`readme.md`** 记录**当前架构、功能模块实现度**与「下一次学习的起点」；**`docs/changelog.md`** 记录详细变更流水；**`docs/project-goals.md`** 记录中长期目标（少改）；**`docs/documentation-index.md`** 说明各文档分工。`python-learning-checklist.mdc` 记录各知识点的未学/进行中/已学状态。新对话时先读 readme + documentation-index + 本文件 + checklist，即可接上用户需求与当前进度。
 
 ## 总体学习目标
 
@@ -225,7 +225,7 @@ alwaysApply: true
 
 ## 当前进度与下一步（与 readme 同步）
 
-- **已完成（以根目录 `readme.md` §2.1 为准）**：阶段 0～8 关键能力已具备；数据库 + ORM + 迁移；**`/chat` / `/chat/stream`（SSE）**、planner、MCP、**会话记忆**、**`GET /events`**、**doc-sessions 支线**、Docker compose、多提供商 LLM 等 — **具体接口表与日期见 `readme.md`**。
+- **已完成（以根目录 `readme.md` §3 功能模块表为准）**：阶段 0～8 关键能力已具备；数据库 + ORM + 迁移；**`/chat` / `/chat/stream`（SSE）**、planner、MCP、**会话记忆**、**`GET /events`**、**doc-sessions 支线**、Docker compose、多提供商 LLM 等 — **详细日期与条目见 `docs/changelog.md`**。
 - **建议下一步**：见 **`readme.md` → §7 下一次学习的起点**（当前主线含：非流式 chat→MCP 补齐 **`conversation_id`/`turn_id`**、前端阶段 3+SSE、doc_sessions 与通用会话衔接等）。
-- **readme 使用**：每次提交前更新 **`readme.md` §6 变更记录** 与 **§7**；产品边界见 **`readme.md` §2.3**。
-- **新对话 / 换设备**：先读 **`readme.md`**、本文件、**`python-learning-checklist.mdc`**、**`user-profile.mdc`**。
+- **提交前文档**：更新 **`readme.md`（§3、§7）** 与 **`docs/changelog.md`**；**`docs/project-goals.md`** 仅在产品目标变化时更新；产品边界见 **`readme.md` §3.1** 与 **`docs/project-goals.md`**。
+- **新对话 / 换设备**：先读 **`readme.md`**、**`docs/documentation-index.md`**、本文件、**`python-learning-checklist.mdc`**、**`user-profile.mdc`**。

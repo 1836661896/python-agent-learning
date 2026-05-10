@@ -6,7 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api_response import fail, success
-from src.routers.chat import router as chat_router
+from src.routers import (
+    agent_router,
+    chat_router,
+    conversations_router,
+    doc_sessions_router,
+    event_router,
+    mcp_router,
+    tasks_router,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +31,10 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 def validation_exception_handler(request, exc: RequestValidationError):
-    # 统一把 Pydantic 校验错误转成项目约定的 {code, data, msg} 返回。
-    # exc.errors() 是一个列表，里面每一项是一个字段错误信息 (dict)
+    # 统一把 Pydantic 校验错误转成项目约定的 {code,data,msg} 返回。
+    # exc.errors() 是一个列表，里面每一项是一个字段错误信息（dict）
     errors = exc.errors()
+
     msgs = []
     for err in errors:
         if isinstance(err, dict) and isinstance(err.get("msg"), str):
@@ -33,7 +42,9 @@ def validation_exception_handler(request, exc: RequestValidationError):
             if ", " in m:
                 m = m.split(", ", 1)[-1]
             msgs.append(m)
+
     msg = "；".join(msgs) if msgs else "参数校验失败"
+
     return JSONResponse(status_code=200, content=fail(msg))
 
 
@@ -43,10 +54,16 @@ def http_exception_handler(request, exc: HTTPException):
     return JSONResponse(status_code=exc.status_code, content=fail(msg))
 
 
-# 健康监测，确保接口畅通
+# 健康监测。确保接口畅通
 @app.get("/health")
 def health():
     return success("服务器正常")
 
 
+app.include_router(tasks_router)
+app.include_router(agent_router)
 app.include_router(chat_router)
+app.include_router(mcp_router)
+app.include_router(event_router)
+app.include_router(doc_sessions_router)
+app.include_router(conversations_router)

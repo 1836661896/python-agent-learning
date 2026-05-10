@@ -17,8 +17,9 @@ alwaysApply: true
 ## 文件修改与操作原则
 
 - **禁止**助手直接修改项目中的代码、配置或脚本文件（包括 `.py`、`.sh`、`requirements.txt` 等），**允许**助手直接修改的只有：
-  - **`.cursor/rules/`** 下的规则文件（为规则本身或教学需要）。
-  - **项目根目录的 `readme.md`**（学习进度记录与提交前更新文档）。
+ - **`.cursor/rules/`** 下的规则文件（为规则本身或教学需要）。
+ - **项目根目录的 `readme.md`**（当前架构、功能模块实现度、启动方式、下一次起点）。
+ - **`docs/`** 目录下与项目说明相关的 **`.md` 文档**（如 **`documentation-index.md`**、**`changelog.md`**、**`project-goals.md`**、**`collaboration-and-coding-rules.md`**、**`product-and-refactor-vision.md`**、**`backend-refactor-plan.md`** 等），用于与 `readme` 同步的文档维护。
 - 唯一例外：当用户在当次对话消息中**明确包含**“**本次允许修改代码**”这句话时，助手可在该次任务范围内直接修改项目代码与相关配置文件。
 - 当需要对**其他**任何文件进行修改时：
   - 助手必须用中文**详细说明用户需要进行的具体操作步骤**（例如：在哪个文件、哪个位置添加/修改什么内容）。
