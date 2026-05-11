@@ -1,6 +1,6 @@
 # 流式聊天 API 说明（`POST /chat/stream`）
 
-> **适用范围**：当前重写后的 **`src/`**（`src_backup` 中为历史实现，以本文件与根目录 **`readme.md`** 为准）。  
+> **适用范围**：当前仓库 **`src/`** 中的 **`POST /chat/stream`**；与根目录 **`readme.md`** 一致处为准。  
 > **更新时机**：变更请求体、SSE 事件形态、路由策略或历史窗口时同步修改本文件与 **`docs/changelog.md`**。
 
 ---
@@ -51,24 +51,26 @@
 ## 4. `chat` 链路：落库与多轮上下文
 
 1. **会话**：无 **`conversation_id`** 则 **`INSERT conversation`**（**`kind=chat`** 等），**`flush`** 得到 **`conv_id`**；有 id 则 **`SELECT`**，不存在则 **`error` + `done(null)`** 并结束。  
-2. **用户消息**：**`INSERT conversation_messages`**（**`role=user`**，**`turn_id`** 为本轮 UUID hex 截断至 ≤50），**`meta`** 中含 **`routing`**。  
-3. **历史窗口**：按 **`conversation_id == conv_id`**、**`order_by(id.desc()).limit(40)`**，再 **`reversed`** 得到时间正序，经 **`conversation_rows_to_messages`** 转为 Ollama **`messages`**（**含本轮刚写入的 user**）。  
-4. **模型**：**`POST` Ollama `/api/chat`**，**`stream: true`**，逐块 **`yield` `delta`**。  
-5. **助手消息**：流结束后拼接全文 **`INSERT`** **`role=assistant`**，同一 **`turn_id`**，**`commit`**。  
-6. **失败**：**`rollback`**（含本轮 user 与新建会话，若尚未 **commit**），**`yield` `error`**；**`finally`** 中若 **`conv_id` 有效则 `yield` `done`**。
+2. **用户消息**：**`INSERT conversation_messages`**（**`role=user`**，**`turn_id`** 为本轮 UUID hex 截断至 ≤50），**`meta`** 中含 **`routing`**，**`flush`**。  
+3. **会话摘要精炼（非流式）**：用当前 **`memory_summary`** 与本轮 **`message`** 调用 **`refine_memory_summary`** → **`complete_ollama_chat`**（**`stream: false`**）；成功则写回 **`memory_summary`/`memory_updated_at`** 并 **`flush`**；异常仅 **`logger.exception`**，不中断后续流式。  
+4. **历史窗口**：按 **`conversation_id == conv_id`**、**`order_by(id.desc()).limit(40)`**，再 **`reversed`** 得到时间正序。  
+5. **拼装 `messages`**： **`conversation_rows_to_messages(rows, conv.memory_summary or "")`** —— 若 **`memory_summary.strip()`** 非空，则在列表**首部**插入一条 **`role=system`**（固定说明 + **`【会话摘要】`** + 正文）；其后为各条 **`user`/`assistant`** 原文（**含本轮 user**）。精炼失败导致摘要仍为空时**不插** **`system`**。  
+6. **模型**：**`POST` Ollama `/api/chat`**，**`stream: true`**，逐块 **`yield` `delta`**。  
+7. **助手消息**：流结束后拼接全文 **`INSERT`** **`role=assistant`**，同一 **`turn_id`**，**`commit`**。  
+8. **失败**：**`rollback`**（含本轮 user 与新建会话，若尚未 **commit**），**`yield` `error`**；**`finally`** 中若 **`conv_id` 有效则 `yield` `done`**。
 
 **环境变量**：**`OLLAMA_BASE_URL`**、**`OLLAMA_MODEL`**；**`httpx`** 使用 **`trust_env=False`** 以避免本机代理影响 **`127.0.0.1`**。
 
 ---
 
-## 5. 与旧版 / 规划中的差异（当前未实现）
+## 5. 与规划中的差异（当前未实现或未接满）
 
 | 能力 | 状态 |
 |------|------|
-| **会话记忆精炼**（`memory_summary` / `maybe_refine_memory` 等） | **未接入**；`memory_summary` 仍为默认空串 |
+| **摘要进入模型 `messages`** | **已做**：非空 **`memory_summary`** 时首条 **`system`**；否则仅 **40 条角色对话**（见 §4 步骤 5） |
 | **`POST /chat` 非流式** | **未实现** |
-| **`GET /conversations` / `GET /conversations/{id}/messages`** | **未在重写版 `api.py` 挂载**（数据库表与 ORM 仍存在，可按需加路由） |
-| **Planner / MCP / builtin**、`/tasks`、`/agent/*`、`/events` 等 | **未在重写版挂载**；参见 **`src_backup`** 与 **`docs/backend-refactor-plan.md`** |
+| **`GET /conversations` / `GET /conversations/{id}/messages`** | **未在 `api.py` 挂载**（表与 ORM 仍存在，可按需加路由） |
+| **Planner / MCP / builtin**、`/tasks`、`/agent/*`、`/events` 等 | **未挂载**；扩展路径见 **`docs/backend-refactor-plan.md`** |
 
 ---
 
@@ -92,4 +94,4 @@ curl -N -X POST http://127.0.0.1:8000/chat/stream \
 
 ---
 
-*文档版本：与 2026-05-10 重写版 `src` 对齐。*
+*文档版本：与 2026-05-11 起「精炼落库、无 `src_backup`」的 `src` 对齐。*

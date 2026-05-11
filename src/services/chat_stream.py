@@ -1,5 +1,7 @@
+import logging
 import uuid
 from collections.abc import Iterator
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,6 +18,10 @@ from src.utils.sse_events import (
     build_error_event,
     sse_line,
 )
+
+from .conversation_refine import refine_memory_summary
+
+logger = logging.getLogger(__name__)
 
 
 def decide_route_auto(message: str) -> MessageMode:
@@ -65,6 +71,17 @@ def stream_chat_turn(body: ChatRequest, db: Session) -> Iterator[str]:
             )
             db.flush()
 
+            try:
+                refined = refine_memory_summary(
+                    conv.memory_summary or "", conv.memory_title or "", body.message
+                )
+                conv.memory_summary = refined["summary"].strip()[:16000]
+                conv.memory_title = refined["title"].strip()[:10]
+                conv.memory_updated_at = datetime.now(timezone.utc)
+                db.flush()
+            except Exception:
+                logger.exception("refine_memory_summary failed")
+
             stmt = (
                 select(ConversationMessage)
                 .where(ConversationMessage.conversation_id == conv_id)
@@ -76,7 +93,9 @@ def stream_chat_turn(body: ChatRequest, db: Session) -> Iterator[str]:
 
             parts: list[str] = []
             try:
-                messages = conversation_rows_to_messages(rows)
+                messages = conversation_rows_to_messages(
+                    rows, conv.memory_summary or ""
+                )
                 for chunk in iter_ollama_chat_chunks(messages):
                     parts.append(chunk)
                     yield sse_line(build_delta_event(chunk))

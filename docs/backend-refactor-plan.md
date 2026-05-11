@@ -177,7 +177,7 @@
 
 开场请先读：`readme.md` → **`docs/documentation-index.md`** → **本文件** → `.cursor/rules/python-study-plan.mdc` → `user-profile.mdc`。  
 若用户说「后端重构」，以 **§7 进度记录** 为准接着指导；**不要假设前端同步完成**。  
-用户本地执行改动时，助手默认**不直接改 `.py`**（除非用户当次写明「本次允许修改代码」）。
+用户本地执行改动时，助手默认**不直接改 `.py`**；仅当用户当次消息正文含**一字不差**的 **`本次允许修改`** 六字时才可直接改 `.py`（见 **`python-learning-agent.mdc`**）。
 
 ---
 

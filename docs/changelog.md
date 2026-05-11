@@ -15,6 +15,9 @@
 
 | 日期 | 类型 | 摘要 |
 |------|------|------|
+| **2026-05-11** | 规则 / 文档 | **`.py` 授权口令**：仅当用户消息含**完全一致**的 **`本次允许修改`** 六字时助手可直接改 **`*.py`**；更新 **`python-learning-agent.mdc`**、**`user-profile.mdc`**、**`collaboration-and-coding-rules.md`**、**`backend-refactor-plan.md`** §9。 |
+| **2026-05-11** | 测试 / 文档 | **`conversation_rows_to_messages`** 传入 **`memory_summary`** 并前置 **`system`**；新增 **`tests/test_messages.py`**；**`test_chat_stream`** 断言传给 Ollama 的 **`messages`**（含精炼失败无 **`system`** 分支）；**`docs/chat-stream-api.md`**、**`readme.md`** §3/§7 同步。 |
+| **2026-05-11** | 重构 / 测试 / 文档 | **全项目以 `src/` 为准**：删除 **`src_backup/`**；删除依赖旧模块的 **`tests/test_*.py`**，新增 **`test_llm_completion`**、**`test_conversation_refine`**、**`test_chat_stream`**（含 **`requires_postgres`** 可选集成）；**`conftest.py`** 增加 **`requires_postgres`**。**`readme.md`**、**`docs/chat-stream-api.md`**、**`documentation-index.md`** 去掉 **`src_backup`** 表述并同步精炼与测试说明。 |
 | **2026-05-10** | 文档 | **`readme.md` §7**：将**聊天记录精炼**列为下一步优先项（每次用户消息触发精炼；历史展示全文、**`messages` 拼装用精炼结果**；输入为**上轮精炼 + 本次原文**）；便于次日开工与提交前对齐计划。 |
 | **2026-05-10** | 文档 | **`docs/chat-stream-api.md`**：重写版 **`POST /chat/stream`**（请求体、**`routing`**、SSE **`delta`/`error`/`done`**、**`chat`** 落库与最近 40 条历史、**`plan`/`mcp`** 占位、与 **`src_backup`** 差异）；**`readme.md`** §2～§3、§5、§7 与当前精简 **`src/`** 对齐；**`documentation-index.md`** 增加本文件索引。 |
 | **2026-05-09** | 文档 | 建立 **`docs/documentation-index.md`**（文档分工）、**`docs/project-goals.md`**（项目目标）、**`docs/changelog.md`**（本文件）、**`docs/collaboration-and-coding-rules.md`**；**`readme.md`** 改为以架构与模块实现度为主并引用上述文档；**`docs/product-and-refactor-vision.md`** 收缩为以重构与工程对齐为主并指向 `project-goals.md`。 |

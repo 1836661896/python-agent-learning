@@ -1,19 +1,12 @@
-import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, text
-from sqlalchemy import Enum as SAEnum
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.db.base import Base
+from src.enums import MessageRole
 from src.types import ArgsDict
-
-
-class MessageRole(str, enum.Enum):
-    user = "user"
-    assistant = "assistant"
-    system = "system"
 
 
 class ConversationMessage(Base):
@@ -24,7 +17,7 @@ class ConversationMessage(Base):
         Integer, ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[MessageRole] = mapped_column(
-        SAEnum(MessageRole, name="message_role", native_enum=False), nullable=False
+        Enum(MessageRole, name="message_role", native_enum=False), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     turn_id: Mapped[str] = mapped_column(String(length=50), nullable=False)

@@ -1,21 +1,16 @@
 import json
-import os
 from typing import Generator
 
 import httpx
-from dotenv import load_dotenv
 
 from src.types import ChatMessageList
 
-load_dotenv()
-
-base = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-model = os.getenv("OLLAMA_MODEL", "qwen:7b")
+from .config import base, model, timeout
 
 
 def iter_ollama_chat_chunks(messages: ChatMessageList) -> Generator[str, None, None]:
     url = f"{base}/api/chat"
-    with httpx.Client(timeout=120, trust_env=False) as client:
+    with httpx.Client(timeout=timeout, trust_env=False) as client:
         with client.stream(
             "POST",
             url,
