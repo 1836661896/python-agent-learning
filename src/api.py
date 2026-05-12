@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from src.api_response import fail, success
 from src.routers.chat import router as chat_router
+from src.routers.conversations import router as conversation_router
 
 logger = logging.getLogger(__name__)
 
@@ -50,3 +51,4 @@ def health():
 
 
 app.include_router(chat_router)
+app.include_router(conversation_router)

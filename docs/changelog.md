@@ -15,6 +15,8 @@
 
 | 日期 | 类型 | 摘要 |
 |------|------|------|
+| **2026-05-13** | 文档 | **`readme.md` §7**：明确下一步为 **MCP**（本库 **`mcp_dev`/HTTP 服务、`mcp_client` 与 `chat_stream` 的 `mcp` 分支**、同步 **`docs/chat-stream-api.md`**）与 **前端**（会话列表/历史、**SSE `done`** 等）对接；**`changelog`** 本条与提交计划对齐。 |
+| **2026-05-12** | API / 测试 / 文档 | **`GET /conversation/list`**、**`GET /conversation/{id}/messages`**（分页、**`kind`/`role`** 筛选、异常 **`fail` + `rollback`**）；**`tests/test_conversations_api.py`**（**`requires_postgres`**）；新增 **`docs/conversations-api.md`**；**`readme.md`** 功能表、API 备忘、**下一次起点**与 **`documentation-index.md`** 同步。 |
 | **2026-05-11** | 规则 / 文档 | **`.py` 授权口令**：仅当用户消息含**完全一致**的 **`本次允许修改`** 六字时助手可直接改 **`*.py`**；更新 **`python-learning-agent.mdc`**、**`user-profile.mdc`**、**`collaboration-and-coding-rules.md`**、**`backend-refactor-plan.md`** §9。 |
 | **2026-05-11** | 测试 / 文档 | **`conversation_rows_to_messages`** 传入 **`memory_summary`** 并前置 **`system`**；新增 **`tests/test_messages.py`**；**`test_chat_stream`** 断言传给 Ollama 的 **`messages`**（含精炼失败无 **`system`** 分支）；**`docs/chat-stream-api.md`**、**`readme.md`** §3/§7 同步。 |
 | **2026-05-11** | 重构 / 测试 / 文档 | **全项目以 `src/` 为准**：删除 **`src_backup/`**；删除依赖旧模块的 **`tests/test_*.py`**，新增 **`test_llm_completion`**、**`test_conversation_refine`**、**`test_chat_stream`**（含 **`requires_postgres`** 可选集成）；**`conftest.py`** 增加 **`requires_postgres`**。**`readme.md`**、**`docs/chat-stream-api.md`**、**`documentation-index.md`** 去掉 **`src_backup`** 表述并同步精炼与测试说明。 |

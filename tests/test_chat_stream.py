@@ -100,7 +100,10 @@ def test_stream_chat_persists_and_sse_order(requires_postgres, monkeypatch):
 
     monkeypatch.setattr(
         "src.services.chat_stream.refine_memory_summary",
-        lambda old, msg: f"REF:{msg}",
+        lambda _old_sum, _old_title, msg: {
+            "title": "",
+            "summary": f"REF:{msg}",
+        },
     )
     ollama_msgs: dict[str, list] = {}
 

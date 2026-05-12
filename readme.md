@@ -3,6 +3,7 @@
 > **换设备 / 新对话**：根目录本文件 + **`docs/documentation-index.md`**（各文档职责）+ **`.cursor/rules/python-study-plan.mdc`** + **`python-learning-checklist.mdc`** + **`user-profile.mdc`**。  
 > **详细变更历史**：**`docs/changelog.md`**。  
 > **流式聊天接口约定**：**`docs/chat-stream-api.md`**（`POST /chat/stream`、SSE、`routing`、与旧版差异）。  
+> **会话列表与历史**：**`docs/conversations-api.md`**（`GET /conversation/list`、`GET /conversation/{id}/messages`、分页与 **`data` 约定**）。  
 > **中长期目标（排期与学习方向）**：**`docs/project-goals.md`**。  
 > **重构工程共识**：**`docs/product-and-refactor-vision.md`**；**执行清单**：**`docs/backend-refactor-plan.md`**。
 
@@ -22,7 +23,7 @@
 
 ```
 src/
-├── api.py                 # FastAPI 入口：CORS、校验/HTTP 异常、/health、挂载 chat router
+├── api.py                 # FastAPI 入口：CORS、校验/HTTP 异常、/health、挂载 chat + conversation
 ├── api_response.py        # 统一 JSON：{ code, data, msg }
 ├── db/                    # DATABASE_URL、SessionLocal、Base、get_db
 ├── models/                # Conversation、ConversationMessage（MessageRole 等）
@@ -30,7 +31,8 @@ src/
 ├── types.py               # MessageMode 等与请求/落库对齐的类型
 ├── llm/                   # config、Ollama 流式/非流式（/api/chat）、messages 拼装
 ├── routers/
-│   └── chat/              # POST /chat/stream（StreamingResponse + SSE）
+│   ├── chat/              # POST /chat/stream（StreamingResponse + SSE）
+│   └── conversations.py   # GET /conversation/list、GET /conversation/{id}/messages
 ├── services/
 │   ├── chat_stream.py     # 路由解析、会话与消息落库、流式、精炼落库
 │   └── conversation_refine.py  # memory_summary 精炼（非流式 LLM）
@@ -48,15 +50,16 @@ src/
 
 | 模块 | 主要路径 | 实现程度 | 说明 |
 |------|-----------|-----------|------|
-| 应用入口 | `src/api.py` | 已完成 | 仅 **`GET /health`** + **`POST /chat/stream`**（**`SessionLocal()`** 须在生成器内创建并在 **`finally`** 中 **`db.close()`**） |
+| 应用入口 | `src/api.py` | 已完成 | **`GET /health`**、**`POST /chat/stream`**、**`routers/conversations`**（**`SessionLocal()`** 在流式路由的生成器内创建并在 **`finally`** 中 **`db.close()`**） |
 | 健康检查 | `GET /health` | 已完成 | 返回 **`api_response.success`** |
 | 流式聊天 | `routers/chat/router.py`、`services/chat_stream.py` | 已完成 | **`routing`**：`auto`（当前恒走 **`chat`**）\|`chat`\|`plan`\|`mcp`；**`plan`/`mcp`** 占位返回 **`error` + `done(conversation_id=null)`** |
 | 会话与消息落库 | `models/conversation.py` 等 | 已完成 | **`chat`**：写 user → 精炼 **`memory_summary`** → 流式 assistant → **`turn_id`** 配对；历史 **最近 40 条**（**`id desc` + `reversed`**） |
 | Ollama 流式 | `llm/streaming.py`、`llm/messages.py` | 已完成 | **`/api/chat`** **`stream: true`**；消息角色由 **`MessageRole.value`** 映射 |
 | SSE | `utils/sse_events.py` | 已完成 | **`delta` / `error` / `done`** |
-| 非流式 `POST /chat`、Planner、MCP HTTP、`/tasks`、`/agent`、`/events`、`/conversations`… | — | **未挂载** | 按 **`docs/backend-refactor-plan.md`** 在现行 **`src/`** 上扩展；落地后更新本表 |
+| 会话列表与历史 | `routers/conversations.py` | **已完成** | **`GET /conversation/list`**（分页、可选 **`kind`**）；**`GET /conversation/{conversation_id}/messages`**（分页、可选 **`role`**、按消息 **`created_at` 降序**）；约定见 **`docs/conversations-api.md`** |
+| 非流式 `POST /chat`、Planner、MCP HTTP、`/tasks`、`/agent`、`/events` 等 | — | **未挂载** | 按 **`docs/backend-refactor-plan.md`** 在现行 **`src/`** 上扩展；落地后更新本表 |
 | 会话记忆精炼 | `conversation_refine.py`、`chat_stream.py`、`llm/messages.py` | **已完成** | 每轮 user 后精炼落库；**`conversation_rows_to_messages`** 在非空摘要时前置 **`system`**，否则仅最近 **40 条**角色对话；API 历史仍为消息表**原文** |
-| 工程 | `Dockerfile`、`docker compose`、`alembic/`、`tests/` | 部分 | **`tests/`** 已对齐精简栈（**`pytest tests`**；含可选 PostgreSQL 集成用例，无库时 **skip**） |
+| 工程 | `Dockerfile`、`docker compose`、`alembic/`、`tests/` | 部分 | **`pytest tests`**；含 **`tests/test_conversations_api.py`**、**`test_chat_stream`** 等可选 **PostgreSQL** 用例（无库时 **skip**） |
 
 ### 3.1 合规（与当前代码一致的一行）
 
@@ -79,7 +82,7 @@ src/
 
 - **统一 JSON 响应**（**`/health` 等非 SSE**）：`{ "code", "data", "msg" }`；校验错误经异常处理器返回 **`code != 0`** 风格。  
 - **`POST /chat/stream`**：**`text/event-stream`**；**`data:`** 后为 JSON，含 **`type`**：**`delta`**（**`text`**）、**`error`**（**`msg`**）、**`done`**（**`conversation_id`**、**`turn_id`**）。详见 **`docs/chat-stream-api.md`**。  
-- **历史分页 API**（**`data.records`** 等）：当前 **`src/` 未挂载**；实现时补路由与 **`pytest`**。
+- **会话列表与消息历史分页**：**`GET /conversation/list`**、**`GET /conversation/{conversation_id}/messages`**；成功时 **`data`** 为 **`ListResult`**（**`records` / `total` / `page` / `limit`**）；失败时 **`data` 可能为 `null`**，详见 **`docs/conversations-api.md`**。
 
 ---
 
@@ -95,9 +98,15 @@ src/
    - **已实现**：精炼落库 + **`messages`** 首条 **`system`** 携带摘要（见 **`docs/chat-stream-api.md`**）；列表/API 仍返回消息**原文**。  
    - **可选演进**：过长摘要再压缩、或更早轮次 user 条目不重复进 **`messages`** 等。  
 
-2. **后端（当前精简栈）**：按需挂载 **`GET /conversations/{id}/messages`**、**`POST /chat` 非流式**；**`plan`/`mcp`** 接入真实能力时更新 **`docs/chat-stream-api.md`**。  
-3. **能力扩展**：对照 **`docs/backend-refactor-plan.md`** 在 **`src/`** 内逐步实现，并同步 **`readme.md` §3** 与 **`docs/changelog.md`**。  
-4. **前端**：**SSE** 解析 **`done`** 中的 **`conversation_id` / `turn_id`**；错误态与 **`routing`** 占位文案联调。
+2. **MCP（后端下一主块）**  
+   - **目标**：在本仓库内（建议目录 **`mcp_dev/`**）或独立环境起 **HTTP 型 MCP Server**，与主项目 **`.env` 的 `MCP_SERVER_URL` / `MCP_HTTP_PATH`** 对齐；完善 **`src/services/mcp_client.py`**（**`initialize` / `tools/list` / `tools/call`**、白名单与超时），再接入 **`chat_stream`** 中 **`routing=mcp`** 的真实链路，并更新 **`docs/chat-stream-api.md`**。  
+   - **说明**：**`src/llm/mcp_config.py`** 等仅为配置与客户端雏形；**`plan`/`auto` 智能路由**可在 MCP 跑通后再做。  
+
+3. **前端对接**  
+   - **会话**：对接 **`GET /conversation/list`**、**`GET /conversation/{id}/messages`**（分页与 **`code`/`data`** 约定见 **`docs/conversations-api.md`**）。  
+   - **流式**：**SSE** 解析 **`done`** 中的 **`conversation_id` / `turn_id`**；错误态与 **`routing`**（含后续 **`mcp`/`plan`** 非占位）文案联调。  
+
+4. **其它后端**：按需补 **`POST /chat` 非流式**；对照 **`docs/backend-refactor-plan.md`** 扩展时同步 **`readme.md`** 与本 **`changelog`**。
 
 ---
 
