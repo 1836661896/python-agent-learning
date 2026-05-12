@@ -25,13 +25,18 @@ def mcp_initialize() -> dict:
         "params": {
             "protocolVersion": "2024-11-05",
             "capabilities": {},
-            "clientInfo": {"name": "puthon-agent-learning", "version": "1.0.0"},
+            "clientInfo": {"name": "python-agent-learning", "version": "1.0.0"},
         },
+    }
+
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
     }
 
     url = _rpc_url()
     with httpx.Client(timeout=mcp_timeout, trust_env=False) as client:
-        resp = client.post(url, json=body)
+        resp = client.post(url, json=body, headers=headers)
         resp.raise_for_status()
         data = resp.json()
 
