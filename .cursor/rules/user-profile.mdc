@@ -36,8 +36,8 @@ alwaysApply: true
 ## 项目与进度（随学习更新）
 
 - **项目性质**：学习项目；首要目标是**学会**，其次才是完成功能。
-- **当前进度**：后端为 **FastAPI 装配 + 多路由**（`src/api.py` 挂载 **tasks / agent / chat / mcp / events / doc_sessions / conversations**）；**PostgreSQL + Alembic**；**`/chat` 与 `/chat/stream`（SSE）**、planner（mcp/builtin/chat）、**会话与 `conversation_messages`**、**`GET /events` 分页筛选**、**文档支线 doc-sessions**；**`pytest`** 覆盖核心路径。前端 **左栏 + 右栏 `ChatPanel`** 与上述 API 联调（详见 **`frontend/readme.md`**）。**实现程度与目录**以根目录 **`readme.md` §3** 为准；**变更流水**见 **`docs/changelog.md`**；**中长期目标**见 **`docs/project-goals.md`**。
-- **近期目标（与 `readme.md` §7、`docs/project-goals.md` 同步）**：补齐 **非流式 `POST /chat` → MCP** 响应中的 **`conversation_id` / `turn_id`**；**左侧 `GET /events` 时间线**与 **`turn_id` 联调**；右侧 **SSE** 与前端阶段 3+ 衔接；**`doc_sessions` 与通用会话**渐进；**分级路由**与 **阶段 9 鉴权**按需评估。合规提示见 **`readme.md` §3.1** 与 **`docs/project-goals.md`**。
+- **当前进度**：后端以根目录 **`readme.md` §3** 为准：当前 **`src/api.py`** 挂载 **`GET /health`**、**`POST /chat/stream`**、**`GET /conversation/*`**；**PostgreSQL + Alembic**；会话与消息落库、Ollama 流式、SSE；**`mcp_config` + `mcp_client`** 已可经 Streamable HTTP 对 **`myproject/mcp-server`** 做 **`list_tools` / `call_tool`**（**`routing=mcp`** 在流式里仍为占位）。**`pytest`** 见 **`tests/`**。前端见 **`frontend/readme.md`**。**变更流水**见 **`docs/changelog.md`**。
+- **近期目标（与 `readme.md` §7、`docs/project-goals.md` 同步）**：先在 **`myproject/mcp-server`** 完善 **1～2 个真实可用 tool**；再回到本仓库接 **`routing=mcp`**、可选 **`/mcp/*` 调试路由**、模型选 tool 与 **`docs/chat-stream-api.md`** 说明。其余：非流式 **`POST /chat`**、**`GET /events`** 等与 **`docs/backend-refactor-plan.md`** / **`project-goals.md`** 按需。合规见 **`readme.md` §3.1**。
 - **前端**：**React**（`myproject/frontend`），与后端 API 联调；进度见 **`frontend/readme.md`**。
 - **多设备/新对话**：会换设备或新开 Cursor 窗口；依赖 **`readme.md`**、**`docs/documentation-index.md`**、**`study-plan`**、**`checklist`** 同步进度；希望助手在新对话时先读上述文档再继续。
 - **文档体系（2026-05-09）**：用户要求区分 **readme（当前真相）** / **changelog（详细变更）** / **project-goals（目标、少改）** / **`.cursor/rules`（助手硬规则）** / **`docs/collaboration-and-coding-rules.md`（人类可读摘要）** / **本画像**；并要求助手在**修改规划类文档后及时更新对用户的理解**。

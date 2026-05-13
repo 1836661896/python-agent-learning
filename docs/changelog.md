@@ -15,6 +15,7 @@
 
 | 日期 | 类型 | 摘要 |
 |------|------|------|
+| **2026-05-12** | 文档 | **MCP 客户端落地说明**：**`readme.md`** §2 树、§3 功能表（**`mcp_config` + `mcp_client`** 与 **`routing=mcp` 占位**区分）、§4 环境变量与自测提示、§7 下一主块改为「本库 client 已完成、流式 **`mcp` 路由与 REST 调试暂缓」并指向 **`myproject/mcp-server`** 先完善真实 tools 再回接。 |
 | **2026-05-13** | 文档 | **`readme.md` §7**：明确下一步为 **MCP**（本库 **`mcp_dev`/HTTP 服务、`mcp_client` 与 `chat_stream` 的 `mcp` 分支**、同步 **`docs/chat-stream-api.md`**）与 **前端**（会话列表/历史、**SSE `done`** 等）对接；**`changelog`** 本条与提交计划对齐。 |
 | **2026-05-12** | API / 测试 / 文档 | **`GET /conversation/list`**、**`GET /conversation/{id}/messages`**（分页、**`kind`/`role`** 筛选、异常 **`fail` + `rollback`**）；**`tests/test_conversations_api.py`**（**`requires_postgres`**）；新增 **`docs/conversations-api.md`**；**`readme.md`** 功能表、API 备忘、**下一次起点**与 **`documentation-index.md`** 同步。 |
 | **2026-05-11** | 规则 / 文档 | **`.py` 授权口令**：仅当用户消息含**完全一致**的 **`本次允许修改`** 六字时助手可直接改 **`*.py`**；更新 **`python-learning-agent.mdc`**、**`user-profile.mdc`**、**`collaboration-and-coding-rules.md`**、**`backend-refactor-plan.md`** §9。 |
