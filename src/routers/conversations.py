@@ -1,15 +1,18 @@
 import logging
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from fastapi import APIRouter, Body, Depends
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from src.api_response import ResponseResult, fail, success
 from src.db.deps import get_db
+from src.enums import ConversationKind
 from src.models.conversation import Conversation
 from src.models.conversation_messages import ConversationMessage
 from src.schemas.conversations import (
+    ConversationBatchDeleteBody,
+    ConversationCreateBody,
     ConversationListItem,
     ConversationListQuery,
     ConversationMessageItem,
@@ -56,6 +59,54 @@ def list_conversations(
         logger.exception("会话列表查询失败（未知错误）")
         db.rollback()
         return fail("会话列表查询失败，请稍后重试")
+
+
+@router.post("/create")
+def create_conversation(
+    body: ConversationCreateBody = Body(), db: Session = Depends(get_db)
+) -> ResponseResult[dict | None]:
+    kind = body.kind or ConversationKind.chat
+    try:
+        conv = Conversation(
+            kind=kind, memory_title="", memory_summary="", extra_json={}
+        )
+        db.add(conv)
+        db.commit()
+        db.refresh(conv)
+        return success("创建成功", {"id": conv.id})
+    except SQLAlchemyError:
+        logger.exception("创建新会话失败（数据库）")
+        db.rollback()
+        return fail("创建新会话失败。")
+    except Exception:
+        logger.exception("创建新会话失败（未知原因）")
+        db.rollback()
+        return fail("创建新会话失败。")
+
+
+@router.post("/delete")
+def delete_conversation_list(
+    body: ConversationBatchDeleteBody, db: Session = Depends(get_db)
+) -> ResponseResult[None]:
+    """会话批量删除"""
+    unique_ids = sorted(set(body.ids))
+    try:
+        stmt = select(Conversation.id).where(Conversation.id.in_(unique_ids))
+        delete_ids = sorted(list(db.scalars(stmt).all()))
+        if delete_ids:
+            db.execute(delete(Conversation).where(Conversation.id.in_(delete_ids)))
+        else:
+            return fail("未找到会话，请确认数据是否正确")
+        db.commit()
+        return success(f"已删除选中的{len(delete_ids)}条会话")
+    except SQLAlchemyError:
+        logger.exception("批量删除会话失败（数据库）")
+        db.rollback()
+        return fail("批量删除会话失败，请稍后重试")
+    except Exception:
+        logger.exception("批量删除会话失败（未知错误）")
+        db.rollback()
+        return fail("批量删除会话失败，请稍后重试")
 
 
 @router.get("/{conversation_id}/messages")

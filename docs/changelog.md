@@ -15,6 +15,10 @@
 
 | 日期 | 类型 | 摘要 |
 |------|------|------|
+| **2026-05-12** | 文档 | **提交前文档收敛**：**`docs/conversations-api.md`** 标题与「何时更新」覆盖删除/新建；**§5 测试** 与当前用例覆盖度对齐。**`readme.md`** 文首索引、§2 **`schemas`** 注释、§3 会话行去掉重复「可选 pytest」、§3 **工程** 行指向 **§5** 扩展说明。**`documentation-index.md`** 中本文件描述与标题一致。 |
+| **2026-05-12** | 功能 / 文档 | **会话 HTTP 闭环**：**`POST /conversation/create`**（**`ConversationCreateBody`**、**`data.id`**）与批量 **`POST /conversation/delete`** 已落地；**`readme.md` §3** 会话模块标 **已完成**，§2/§5/§7 与 **`docs/conversations-api.md`**（§3/§4 说明与实现对齐）同步。 |
+| **2026-05-12** | 文档 | **会话删除改为批量约定**：**`docs/conversations-api.md` §3** 由单条 **`DELETE /{id}`** 改为 **`POST /conversation/delete`**，请求体 **`ids: number[]`**，响应建议 **`deleted_ids` / `not_found_ids`**；**`readme.md`** 文首、§2、§3、§5 与 **`documentation-index.md`** 同步。单条删除若仍需可自行加路由，以本文件为准避免两套语义并存。 |
+| **2026-05-12** | 文档 | **会话删除接口契约**：**`docs/conversations-api.md`** 新增 **`§3` `DELETE /conversation/{conversation_id}`**（成功 **`data.id`**、不存在与异常时 **`fail`**、**CASCADE** 说明、路由顺序注意）；**`§4` 测试** 补充删除用例建议。**`readme.md`** 文首索引、§2 注释、§3 会话模块标 **进行中**、§5 API 备忘；**`documentation-index.md`** 索引行同步 **`DELETE`**。实现代码由维护者自行提交。 |
 | **2026-05-12** | 文档 | **MCP 客户端落地说明**：**`readme.md`** §2 树、§3 功能表（**`mcp_config` + `mcp_client`** 与 **`routing=mcp` 占位**区分）、§4 环境变量与自测提示、§7 下一主块改为「本库 client 已完成、流式 **`mcp` 路由与 REST 调试暂缓」并指向 **`myproject/mcp-server`** 先完善真实 tools 再回接。 |
 | **2026-05-13** | 文档 | **`readme.md` §7**：明确下一步为 **MCP**（本库 **`mcp_dev`/HTTP 服务、`mcp_client` 与 `chat_stream` 的 `mcp` 分支**、同步 **`docs/chat-stream-api.md`**）与 **前端**（会话列表/历史、**SSE `done`** 等）对接；**`changelog`** 本条与提交计划对齐。 |
 | **2026-05-12** | API / 测试 / 文档 | **`GET /conversation/list`**、**`GET /conversation/{id}/messages`**（分页、**`kind`/`role`** 筛选、异常 **`fail` + `rollback`**）；**`tests/test_conversations_api.py`**（**`requires_postgres`**）；新增 **`docs/conversations-api.md`**；**`readme.md`** 功能表、API 备忘、**下一次起点**与 **`documentation-index.md`** 同步。 |

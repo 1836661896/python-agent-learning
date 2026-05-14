@@ -36,8 +36,8 @@ alwaysApply: true
 ## 项目与进度（随学习更新）
 
 - **项目性质**：学习项目；首要目标是**学会**，其次才是完成功能。
-- **当前进度**：后端以根目录 **`readme.md` §3** 为准：当前 **`src/api.py`** 挂载 **`GET /health`**、**`POST /chat/stream`**、**`GET /conversation/*`**；**PostgreSQL + Alembic**；会话与消息落库、Ollama 流式、SSE；**`mcp_config` + `mcp_client`** 已可经 Streamable HTTP 对 **`myproject/mcp-server`** 做 **`list_tools` / `call_tool`**（**`routing=mcp`** 在流式里仍为占位）。**`pytest`** 见 **`tests/`**。前端见 **`frontend/readme.md`**。**变更流水**见 **`docs/changelog.md`**。
-- **近期目标（与 `readme.md` §7、`docs/project-goals.md` 同步）**：先在 **`myproject/mcp-server`** 完善 **1～2 个真实可用 tool**；再回到本仓库接 **`routing=mcp`**、可选 **`/mcp/*` 调试路由**、模型选 tool 与 **`docs/chat-stream-api.md`** 说明。其余：非流式 **`POST /chat`**、**`GET /events`** 等与 **`docs/backend-refactor-plan.md`** / **`project-goals.md`** 按需。合规见 **`readme.md` §3.1**。
+- **当前进度**：后端以根目录 **`readme.md` §3** 为准：**`src/api.py`** 挂载 **`GET /health`**、**`POST /chat/stream`**、**`GET /conversation/*`**（**`list` / `messages` / `delete` / `create`**）；**PostgreSQL + Alembic**；会话与消息落库、Ollama 流式、SSE；**`mcp_config` + `mcp_client`** 可经 Streamable HTTP 调 **`mcp-server`**（**`routing=mcp`** 在流式中仍为占位）。**`pytest`** 见 **`tests/`**。前端见 **`frontend/readme.md`**。**变更流水**见 **`docs/changelog.md`**。
+- **近期目标（与 `readme.md` §7、`docs/project-goals.md` 同步）**：**`myproject/mcp-server`** 上 **1～2 个真实 tool** 后再接本仓库 **`routing=mcp`** 等；**前端** 联调会话 **CRUD** 与 **SSE `done`**。非流式 **`POST /chat`**、**`GET /events`** 等见 **`docs/backend-refactor-plan.md`** / **`project-goals.md`**。合规见 **`readme.md` §3.1**。
 - **前端**：**React**（`myproject/frontend`），与后端 API 联调；进度见 **`frontend/readme.md`**。
 - **多设备/新对话**：会换设备或新开 Cursor 窗口；依赖 **`readme.md`**、**`docs/documentation-index.md`**、**`study-plan`**、**`checklist`** 同步进度；希望助手在新对话时先读上述文档再继续。
 - **文档体系（2026-05-09）**：用户要求区分 **readme（当前真相）** / **changelog（详细变更）** / **project-goals（目标、少改）** / **`.cursor/rules`（助手硬规则）** / **`docs/collaboration-and-coding-rules.md`（人类可读摘要）** / **本画像**；并要求助手在**修改规划类文档后及时更新对用户的理解**。

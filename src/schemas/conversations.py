@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from src.enums import ConversationKind, MessageRole
 from src.types import ArgsDict
@@ -38,3 +38,25 @@ class ConversationMessageItem(BaseModel):
     turn_id: str
     meta: ArgsDict
     created_at: datetime
+
+
+# 会话批量删除请求体
+class ConversationBatchDeleteBody(BaseModel):
+    ids: list[int]
+
+    @field_validator("ids")
+    @classmethod
+    def ids_not_empty(cls, v) -> list[int]:
+        if not v:
+            raise ValueError("至少选择一个会话")
+        return v
+
+    # 第二种写法
+    # ids: list[int] = Field(
+    #     ..., min_length=1, description="待删除会话主键列表；陆游里建议在 set 去重"
+    # )
+
+
+# 会话创建请求体
+class ConversationCreateBody(BaseModel):
+    kind: ConversationKind | None = None
