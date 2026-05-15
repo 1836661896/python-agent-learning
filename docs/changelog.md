@@ -15,6 +15,8 @@
 
 | 日期 | 类型 | 摘要 |
 |------|------|------|
+| **2026-05-12** | 文档 | **提交前整理**：**`readme.md` §3**（流式/MCP 行拆清：前端写死 **`chat`**、**`mcp_client` 未接流式**）；**§7** 将 **「流式真正接入 MCP」** 列为**最高优先**并列后端/前端/SSE/文档待办。**`docs/chat-stream-api.md`** 增补 **§6 MCP 接入规划**、**§7** 自测（原 §6）、**§3** 占位与接入后 SSE 说明。**`documentation-index.md`** 修订脚注。 |
+| **2026-05-12** | 后端 / 测试 | **`refine_memory_summary`**：新增 **`_coerce_refine_json_text`**，解析前剥离 Markdown **`` ``` ``** 围栏，并支持「说明文字 + `{...}`」截取，避免 Ollama 非纯 JSON 导致 **`JSONDecodeError`** 与 **`memory_title` 长期为空**；**`tests/test_conversation_refine.py`** 补充围栏与前缀用例。 |
 | **2026-05-12** | 文档 | **提交前文档收敛**：**`docs/conversations-api.md`** 标题与「何时更新」覆盖删除/新建；**§5 测试** 与当前用例覆盖度对齐。**`readme.md`** 文首索引、§2 **`schemas`** 注释、§3 会话行去掉重复「可选 pytest」、§3 **工程** 行指向 **§5** 扩展说明。**`documentation-index.md`** 中本文件描述与标题一致。 |
 | **2026-05-12** | 功能 / 文档 | **会话 HTTP 闭环**：**`POST /conversation/create`**（**`ConversationCreateBody`**、**`data.id`**）与批量 **`POST /conversation/delete`** 已落地；**`readme.md` §3** 会话模块标 **已完成**，§2/§5/§7 与 **`docs/conversations-api.md`**（§3/§4 说明与实现对齐）同步。 |
 | **2026-05-12** | 文档 | **会话删除改为批量约定**：**`docs/conversations-api.md` §3** 由单条 **`DELETE /{id}`** 改为 **`POST /conversation/delete`**，请求体 **`ids: number[]`**，响应建议 **`deleted_ids` / `not_found_ids`**；**`readme.md`** 文首、§2、§3、§5 与 **`documentation-index.md`** 同步。单条删除若仍需可自行加路由，以本文件为准避免两套语义并存。 |

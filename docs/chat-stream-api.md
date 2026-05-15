@@ -30,7 +30,7 @@
 | **`auto`** | 经 **`resolve_effective_route`** 解析；现阶段 **`decide_route_auto` 恒为 `chat`**，与强制 **`chat`** 等价 |
 | **`chat`** | 走 Ollama 流式对话，**落库** `conversation`（新建时）与 **`conversation_messages`**（user + assistant） |
 | **`plan`** | 占位：返回 **`error`**「计划链路尚未接入」，**不落库**；**`done`** 中 **`conversation_id` 为 `null`** |
-| **`mcp`** | 占位：同上 |
+| **`mcp`** | **占位**（返回 **`error`**「**mcp 链路尚未接入**」）；**`done`** 中 **`conversation_id` 为 `null`**。**真正接入**：见 **`readme.md` §7** 与下文 **§6** |
 
 ---
 
@@ -44,7 +44,7 @@
 | **`error`** | **`msg`** | 人类可读错误说明（会话不存在、模型失败、占位未接入等） |
 | **`done`** | **`conversation_id`**（`int` 或 `null`）、**`turn_id`**（`string`） | 标志本轮流结束；**`turn_id`** 用于将本轮 user 与 assistant 消息配对 |
 
-**顺序约定（建议客户端依赖）**：正常 **`chat`** 路径为若干 **`delta`** → **`done`**；出错时可能为 **`error`** → **`done`**；**`plan`/`mcp`** 为 **`error`** → **`done`**（**`conversation_id` 为 null**）。
+**顺序约定（建议客户端依赖）**：正常 **`chat`** 路径为若干 **`delta`** → **`done`**；出错时可能为 **`error`** → **`done`**；**`plan`/`mcp`（占位期）** 为 **`error`** → **`done`**（**`conversation_id` 为 null**）。**MCP 真正接入后**，可能出现 **`tool_*`** 类事件或 **`delta` 与工具结果交错**，届时以 **`readme.md` §7** 与本文件同步版本为准。
 
 ---
 
@@ -70,11 +70,24 @@
 | **摘要进入模型 `messages`** | **已做**：非空 **`memory_summary`** 时首条 **`system`**；否则仅 **40 条角色对话**（见 §4 步骤 5） |
 | **`POST /chat` 非流式** | **未实现** |
 | **`GET /conversations` / `GET /conversations/{id}/messages`** | **未在 `api.py` 挂载**（表与 ORM 仍存在，可按需加路由） |
-| **Planner / MCP / builtin**、`/tasks`、`/agent/*`、`/events` 等 | **未挂载**；扩展路径见 **`docs/backend-refactor-plan.md`** |
+| **Planner / MCP / builtin**、`/tasks`、`/agent/*`、`/events` 等 | **未挂载**；**流式 `routing=mcp` 仅占位**（真正接入见 **§6**）；扩展路径见 **`docs/backend-refactor-plan.md`** |
 
 ---
 
-## 6. 自测示例（`curl`）
+## 6. MCP 接入规划（尚未实现）
+
+> **与代码一致**：当前 **`routing=mcp`** 不调用 **`mcp_client`**；前端示例仍固定 **`routing: "chat"`**。以下为实现**真正接入**时的建议步骤，落地后请改写上文 **§2、§3** 与本节。
+
+| 步骤 | 说明 |
+|------|------|
+| **环境与依赖** | **`MCP_SERVER_URL`**、**`MCP_HTTP_PATH`**、**`MCP_TIMEOUT_SECONDS`**（见 **`readme.md` §4**）；需 **`mcp-server`** 以 Streamable HTTP 启动。 |
+| **后端** | 在 **`stream_chat_turn`** 的 **`mcp`** 分支（及可选 **`auto` → mcp**）中：**`mcp_list_tools_async`** → 模型或白名单选 tool → **`mcp_call_tool_async`** → 将工具输出注入 **`messages`** 与/或落库 → 再流式生成 assistant。 |
+| **SSE** | 可选新增 **`type`**（如 **`tool_call`/`tool_result`**）；**`done`** 仍须携带 **`conversation_id`/`turn_id`**（若本轮已落库）。 |
+| **前端** | 请求体支持 **`routing: "mcp"`** 或 **`"auto"`**；解析并展示工具相关事件。 |
+
+---
+
+## 7. 自测示例（`curl`）
 
 ```bash
 curl -N -X POST http://127.0.0.1:8000/chat/stream \
@@ -94,4 +107,4 @@ curl -N -X POST http://127.0.0.1:8000/chat/stream \
 
 ---
 
-*文档版本：与 2026-05-11 起「精炼落库、无 `src_backup`」的 `src` 对齐。*
+*文档版本：与 2026-05-12 起「精炼 JSON 兜底、§6 MCP 接入规划、**`readme.md` §7** 下一优先为真正接入 MCP」的 `src` 对齐。*

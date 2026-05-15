@@ -11,6 +11,30 @@ class RefineResult(TypedDict):
     summary: str
 
 
+def _coerce_refine_json_text(raw: str) -> str:
+    """把模型返回整理成可被 json.loads 解析的单个 JSON 对象字符串。"""
+    text = (raw or "").strip()
+    if not text:
+        raise ValueError("返回数据为空")
+
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines:
+            lines = lines[1:]
+        while lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+
+    if text.startswith("{"):
+        return text
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("返回数据中未找到 JSON 对象")
+    return text[start : end + 1]
+
+
 def refine_memory_summary(
     old_summary: str, old_title: str, user_message: str
 ) -> RefineResult:
@@ -41,7 +65,8 @@ def refine_memory_summary(
     messages = build_user_message(prompt)
     raw = complete_ollama_chat(messages).strip()
     try:
-        data = json.loads(raw)
+        blob = _coerce_refine_json_text(raw)
+        data = json.loads(blob)
     except json.JSONDecodeError as e:
         raise ValueError("返回数据格式错误") from e
     if (

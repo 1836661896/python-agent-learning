@@ -53,14 +53,14 @@ src/
 |------|-----------|-----------|------|
 | 应用入口 | `src/api.py` | 已完成 | **`GET /health`**、**`POST /chat/stream`**、**`routers/conversations`**（**`SessionLocal()`** 在流式路由的生成器内创建并在 **`finally`** 中 **`db.close()`**） |
 | 健康检查 | `GET /health` | 已完成 | 返回 **`api_response.success`** |
-| 流式聊天 | `routers/chat/router.py`、`services/chat_stream.py` | 已完成 | **`routing`**：`auto`（当前恒走 **`chat`**）\|`chat`\|`plan`\|`mcp`；**`plan`/`mcp`** 在 SSE 中仍为占位（**`error` + `done(conversation_id=null)`**），与下方 **MCP 客户端** 解耦 |
-| MCP 客户端（远端 tools） | `llm/mcp_config.py`、`services/mcp_client.py` | **已完成（库内调用）** | **`.env`**：`MCP_SERVER_URL`、`MCP_HTTP_PATH`（与 **`myproject/mcp-server`** 的 **`--http`** 地址一致）；**`mcp_streamable_endpoint_url()`** + **`streamable_http_client` + `ClientSession`**：**`list_tools` / `call_tool`** 已在 Python 内跑通；**未**挂独立 REST、**未**接入 **`routing=mcp`** 流式分支 |
+| 流式聊天 | `routers/chat/router.py`、`services/chat_stream.py` | 已完成（**纯 `chat`**） | **`routing`**：`auto`（当前恒走 **`chat`**）\|`chat`\|`plan`\|`mcp`；**`plan`/`mcp`** 在 SSE 中仍为占位（**`error` + `done(conversation_id=null)`**）。前端联调页**写死 `routing: "chat"`**，故日常对话**不会**触发 MCP。 |
+| MCP 客户端（远端 tools） | `llm/mcp_config.py`、`services/mcp_client.py` | **已完成（库内调用）** | **`.env`**：`MCP_SERVER_URL`、`MCP_HTTP_PATH`（与 **`myproject/mcp-server`** 的 **`--http`** 地址一致）；**`list_tools` / `call_tool`** 已在 Python 内跑通。**下一优先**：把 **`mcp_client`** 真正接进 **`chat_stream` 的 `routing=mcp`（及/或 `chat` 内 planner）**——见 **§7**。 |
 | 会话与消息落库 | `models/conversation.py` 等 | 已完成 | **`chat`**：写 user → 精炼 **`memory_summary`** → 流式 assistant → **`turn_id`** 配对；历史 **最近 40 条**（**`id desc` + `reversed`**） |
 | Ollama 流式 | `llm/streaming.py`、`llm/messages.py` | 已完成 | **`/api/chat`** **`stream: true`**；消息角色由 **`MessageRole.value`** 映射 |
 | SSE | `utils/sse_events.py` | 已完成 | **`delta` / `error` / `done`** |
 | 会话 HTTP | `routers/conversations.py` | **已完成** | **`GET /list`**、**`GET /{id}/messages`**、**`POST /delete`**（**`ids`**；全未命中 **`fail`**；成功 **`data` 可为 null**）、**`POST /create`**（可选 **`kind`**，默认 **`chat`**；**`data.id`**）。约定见 **`docs/conversations-api.md`** |
 | 非流式 `POST /chat`、Planner、`/tasks`、`/agent`、`/events` 等 | — | **未挂载** | 按 **`docs/backend-refactor-plan.md`** 在现行 **`src/`** 上扩展；落地后更新本表 |
-| 会话记忆精炼 | `conversation_refine.py`、`chat_stream.py`、`llm/messages.py` | **已完成** | 每轮 user 后精炼落库；**`conversation_rows_to_messages`** 在非空摘要时前置 **`system`**，否则仅最近 **40 条**角色对话；API 历史仍为消息表**原文** |
+| 会话记忆精炼 | `conversation_refine.py`、`chat_stream.py`、`llm/messages.py` | **已完成** | 每轮 user 后精炼落库；**`conversation_rows_to_messages`** 在非空摘要时前置 **`system`**；**`refine`** 对模型返回做 JSON 围栏/前缀截取（见 **`docs/changelog.md` 2026-05-12**）；API 历史仍为消息表**原文** |
 | 工程 | `Dockerfile`、`docker compose`、`alembic/`、`tests/` | 部分 | **`pytest tests`**；**`tests/test_conversations_api.py`** 等（**`requires_postgres`**）；会话 **create/delete** 用例可按 **`docs/conversations-api.md` §5** 扩展 |
 
 ### 3.1 合规（与当前代码一致的一行）
@@ -97,22 +97,26 @@ src/
 
 ## 7. 下一次学习的起点
 
-1. **聊天记录精炼**  
-   - **已实现**：精炼落库 + **`messages`** 首条 **`system`** 携带摘要（见 **`docs/chat-stream-api.md`**）；列表/API 仍返回消息**原文**。  
-   - **可选演进**：过长摘要再压缩、或更早轮次 user 条目不重复进 **`messages`** 等。  
+1. **MCP：流式链路真正接入（当前最高优先）**  
+   - **现状**：**`mcp_client`** 可 **`list_tools` / `call_tool`**；**`chat_stream`** 中 **`routing=mcp`** 仍为占位（**`error`「mcp 链路尚未接入」**）；前端 **`ChatThreadPanel`** 固定 **`routing: "chat"`**，故 UI 上**不会出现工具调用**。  
+   - **后端待做（建议顺序）**  
+     - 在 **`routing=mcp`**（或 **`auto` 判别 → mcp**）分支内：**不落占位 error**，改为 **`anyio.run(mcp_list_tools_async)`**（或等价）取工具列表 → 由模型或固定策略选 tool → **`mcp_call_tool_async`** → 将结果写入 **`conversation_messages`** 与/或拼进 **`messages`** 再走流式/非流式回复。  
+     - 与 **`mcp-server`** 对齐：**白名单**、超时、错误映射为 SSE **`error`**；需要时扩展 SSE **`type`**（如 **`tool_call`/`tool_result`**）便于前端展示。  
+     - 同步 **`docs/chat-stream-api.md`**（**`mcp`/`auto`** 行为、事件顺序、落库约定）。  
+   - **前端待做**：发送区支持 **`routing: "mcp"`** 或 **`auto`**；按 SSE 新事件展示「正在调用 xxx」。  
+   - **并行**：在 **`myproject/mcp-server`** 保持 1～2 个可验收的真实 tool；**`MCP_SERVER_URL`** 不变则本仓库 **`.env`** 可不改。  
 
-2. **MCP（本仓库侧）**  
-   - **已完成**：**`mcp_config`**（`MCP_SERVER_URL` + `MCP_HTTP_PATH` → **`mcp_streamable_endpoint_url()`**）、**`mcp_client`**（**`mcp_list_tools_async` / `mcp_call_tool_async`**，对齐 **`mcp-server`** 的 Streamable HTTP）。  
-   - **暂缓（等你完善 mcp-server 上 1～2 个真实 tool 后再回接）**：**`GET/POST /mcp/*` 调试路由**（可选）、**`chat_stream` 中 `routing=mcp` 非占位**、**模型选 tool 与多轮**、**`docs/chat-stream-api.md`** 中 **`mcp`** 行为说明与白名单等。  
-   - **并行**：在 **`myproject/mcp-server`** 增加/打磨实际 tools；地址不变则本仓库 **`.env` 无需改**。  
+2. **聊天记录精炼**  
+   - **已实现**：精炼落库 + **`messages`** 首条 **`system`** 携带摘要；**`conversation_refine`** 已增加 JSON 围栏/前缀兜底（见 **`docs/changelog.md`**）。  
+   - **可选演进**：过长摘要再压缩、或更早轮次 user 条目不重复进 **`messages`** 等。  
 
 3. **会话 HTTP**  
    - **已实现**：**`GET /conversation/list`**、**`GET /conversation/{id}/messages`**、**`POST /conversation/delete`**、**`POST /conversation/create`**（见 **`docs/conversations-api.md`**）。  
-   - **可选**：为 create/delete 补 **`pytest`**；与前端联调「新建 → **`conversation_id`** → 流式 **`done`**」。  
+   - **可选**：为 create/delete 补 **`pytest`**；列表选中项在精炼后**与列表 refetch 同步**（避免右侧标题仍显示「会话 id」直至重选）。  
 
-4. **前端对接**  
-   - **会话**：对接 **`GET /conversation/list`**、**`GET /conversation/{id}/messages`**、**`POST /conversation/delete`**、**`POST /conversation/create`**（分页与 **`code`/`data`** 约定见 **`docs/conversations-api.md`**）。  
-   - **流式**：**SSE** 解析 **`done`** 中的 **`conversation_id` / `turn_id`**；错误态与 **`routing`**（含后续 **`mcp`/`plan`** 非占位）文案联调。  
+4. **前端对接（除 MCP 外）**  
+   - **会话**：列表/历史/删除/新建与 **`docs/conversations-api.md`** 对齐。  
+   - **流式**：**SSE** **`done`** 中的 **`conversation_id` / `turn_id`**；**`plan`** 非占位后的文案联调。  
 
 5. **其它后端**：按需补 **`POST /chat` 非流式**；对照 **`docs/backend-refactor-plan.md`** 扩展时同步 **`readme.md`** 与本 **`changelog`**。
 

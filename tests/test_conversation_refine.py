@@ -33,3 +33,27 @@ def test_refine_memory_summary_empty_user_raises(monkeypatch):
 
     with pytest.raises(ValueError, match="用户消息不能为空"):
         cr.refine_memory_summary("", "", "   ")
+
+
+def test_refine_memory_summary_strips_markdown_fence(monkeypatch):
+    from src.services import conversation_refine as cr
+
+    wrapped = '```json\n{"title":"围栏内","summary":"摘要"}\n```'
+
+    monkeypatch.setattr(cr, "complete_ollama_chat", lambda _m: wrapped)
+
+    out = cr.refine_memory_summary("", "", "hi")
+    assert out["title"] == "围栏内"
+    assert out["summary"] == "摘要"
+
+
+def test_refine_memory_summary_strips_prefix_prose(monkeypatch):
+    from src.services import conversation_refine as cr
+
+    wrapped = '好的，如下：\n{"title":"前缀后","summary":"摘要二"}'
+
+    monkeypatch.setattr(cr, "complete_ollama_chat", lambda _m: wrapped)
+
+    out = cr.refine_memory_summary("", "", "hi")
+    assert out["title"] == "前缀后"
+    assert out["summary"] == "摘要二"
