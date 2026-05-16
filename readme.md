@@ -34,8 +34,10 @@ src/
 │   ├── chat/              # POST /chat/stream（StreamingResponse + SSE）
 │   └── conversations.py   # GET …/list、POST …/delete、POST …/create、GET …/{id}/messages（约定见 docs/conversations-api.md）
 ├── services/
-│   ├── chat_stream.py     # 路由解析、会话与消息落库、流式、精炼落库
-│   ├── mcp_client.py      # 经 Streamable HTTP 连接 sibling **mcp-server**：list_tools / call_tool（异步）
+│   ├── chat_context.py    # 拼装发给模型的 messages（最近 N 条 + 摘要；日后 RAG/向量检索入口）
+│   ├── chat_stream.py     # 路由解析、会话与消息落库、**chat** 流式 / **mcp** 调工具、精炼落库
+│   ├── route_auto.py      # **routing=auto**：list_tools → 非流式 LLM 判别 chat/mcp + 工具名/参数
+│   ├── mcp_client.py      # Streamable HTTP：**list_tools** / **call_tool**、**format_call_tool_result**
 │   └── conversation_refine.py  # memory_summary 精炼（非流式 LLM）
 └── utils/
     └── sse_events.py      # build_*_event、sse_line
@@ -53,15 +55,18 @@ src/
 |------|-----------|-----------|------|
 | 应用入口 | `src/api.py` | 已完成 | **`GET /health`**、**`POST /chat/stream`**、**`routers/conversations`**（**`SessionLocal()`** 在流式路由的生成器内创建并在 **`finally`** 中 **`db.close()`**） |
 | 健康检查 | `GET /health` | 已完成 | 返回 **`api_response.success`** |
-| 流式聊天 | `routers/chat/router.py`、`services/chat_stream.py` | 已完成（**纯 `chat`**） | **`routing`**：`auto`（当前恒走 **`chat`**）\|`chat`\|`plan`\|`mcp`；**`plan`/`mcp`** 在 SSE 中仍为占位（**`error` + `done(conversation_id=null)`**）。前端联调页**写死 `routing: "chat"`**，故日常对话**不会**触发 MCP。 |
-| MCP 客户端（远端 tools） | `llm/mcp_config.py`、`services/mcp_client.py` | **已完成（库内调用）** | **`.env`**：`MCP_SERVER_URL`、`MCP_HTTP_PATH`（与 **`myproject/mcp-server`** 的 **`--http`** 地址一致）；**`list_tools` / `call_tool`** 已在 Python 内跑通。**下一优先**：把 **`mcp_client`** 真正接进 **`chat_stream` 的 `routing=mcp`（及/或 `chat` 内 planner）**——见 **§7**。 |
-| 会话与消息落库 | `models/conversation.py` 等 | 已完成 | **`chat`**：写 user → 精炼 **`memory_summary`** → 流式 assistant → **`turn_id`** 配对；历史 **最近 40 条**（**`id desc` + `reversed`**） |
+| 流式聊天 **`chat`** | `chat_stream.py`、`chat_context.py` | 已完成 | **`routing=chat`**，或 **`auto` 判别为 chat**：写 user → 精炼 → Ollama 流式 assistant；**`meta`** 含 **`routing`**、**`effective_route`**；上下文 **`build_chat_model_messages`**（最近 **40** 条 + 摘要） |
+| **`routing=auto`** | `route_auto.py`、`chat_stream.py` | **已完成** | **`mcp_list_tools_async`** → **`complete_ollama_chat`** 输出 JSON（**`route`** / **`mcp_tool`** / **`mcp_arguments`**）→ 白名单校验（须在 **`tools/list`** 内）；失败回退 **`chat`**；详见 **`docs/chat-stream-api.md` §5** |
+| 流式聊天 **`mcp`** | `chat_stream.py`、`mcp_client.py` | **已完成** | **`routing=mcp`** 须请求体 **`mcp_tool`**；**`auto` 判别为 mcp** 时用 **`route_auto`** 结果。工具结果经 **`format_call_tool_result`** → 一条 SSE **`delta`**（**原文**，尚未 LLM 润色）→ assistant 落库 → **`done`**；**不**走 **`refine_memory_summary`** |
+| MCP 客户端 | `llm/mcp_config.py`、`services/mcp_client.py` | 已完成 | Streamable HTTP；需本机 **`mcp-server`** HTTP 与 **`.env`** 中 **`MCP_*`** 一致 |
+| 会话与消息落库 | `models/conversation.py` 等 | 已完成 | **`chat`** / **`mcp`** 均写 user + assistant、**`turn_id`** 配对；**`mcp`** 会话 **`kind=mcp`** |
 | Ollama 流式 | `llm/streaming.py`、`llm/messages.py` | 已完成 | **`/api/chat`** **`stream: true`**；消息角色由 **`MessageRole.value`** 映射 |
 | SSE | `utils/sse_events.py` | 已完成 | **`delta` / `error` / `done`** |
 | 会话 HTTP | `routers/conversations.py` | **已完成** | **`GET /list`**、**`GET /{id}/messages`**、**`POST /delete`**（**`ids`**；全未命中 **`fail`**；成功 **`data` 可为 null**）、**`POST /create`**（可选 **`kind`**，默认 **`chat`**；**`data.id`**）。约定见 **`docs/conversations-api.md`** |
 | 非流式 `POST /chat`、Planner、`/tasks`、`/agent`、`/events` 等 | — | **未挂载** | 按 **`docs/backend-refactor-plan.md`** 在现行 **`src/`** 上扩展；落地后更新本表 |
 | 会话记忆精炼 | `conversation_refine.py`、`chat_stream.py`、`llm/messages.py` | **已完成** | 每轮 user 后精炼落库；**`conversation_rows_to_messages`** 在非空摘要时前置 **`system`**；**`refine`** 对模型返回做 JSON 围栏/前缀截取（见 **`docs/changelog.md` 2026-05-12**）；API 历史仍为消息表**原文** |
-| 工程 | `Dockerfile`、`docker compose`、`alembic/`、`tests/` | 部分 | **`pytest tests`**；**`tests/test_conversations_api.py`** 等（**`requires_postgres`**）；会话 **create/delete** 用例可按 **`docs/conversations-api.md` §5** 扩展 |
+| **`plan` 路由** | `chat_stream.py` | **未实现** | **`routing=plan`** 仍为占位 **`error`** |
+| 工程 | `Dockerfile`、`docker compose`、`alembic/`、`tests/` | 部分 | **`pytest tests`**（含 **`test_chat_stream`** MCP mock、**`test_mcp_client`**、**`test_chat_context`**、**`test_conversations_api`** 等；**`requires_postgres`**） |
 
 ### 3.1 合规（与当前代码一致的一行）
 
@@ -97,28 +102,29 @@ src/
 
 ## 7. 下一次学习的起点
 
-1. **MCP：流式链路真正接入（当前最高优先）**  
-   - **现状**：**`mcp_client`** 可 **`list_tools` / `call_tool`**；**`chat_stream`** 中 **`routing=mcp`** 仍为占位（**`error`「mcp 链路尚未接入」**）；前端 **`ChatThreadPanel`** 固定 **`routing: "chat"`**，故 UI 上**不会出现工具调用**。  
-   - **后端待做（建议顺序）**  
-     - 在 **`routing=mcp`**（或 **`auto` 判别 → mcp**）分支内：**不落占位 error**，改为 **`anyio.run(mcp_list_tools_async)`**（或等价）取工具列表 → 由模型或固定策略选 tool → **`mcp_call_tool_async`** → 将结果写入 **`conversation_messages`** 与/或拼进 **`messages`** 再走流式/非流式回复。  
-     - 与 **`mcp-server`** 对齐：**白名单**、超时、错误映射为 SSE **`error`**；需要时扩展 SSE **`type`**（如 **`tool_call`/`tool_result`**）便于前端展示。  
-     - 同步 **`docs/chat-stream-api.md`**（**`mcp`/`auto`** 行为、事件顺序、落库约定）。  
-   - **前端待做**：发送区支持 **`routing: "mcp"`** 或 **`auto`**；按 SSE 新事件展示「正在调用 xxx」。  
-   - **并行**：在 **`myproject/mcp-server`** 保持 1～2 个可验收的真实 tool；**`MCP_SERVER_URL`** 不变则本仓库 **`.env`** 可不改。  
+1. **MCP 返回值润色（当前最高优先）**  
+   - **现状**：**`mcp`** / **`auto→mcp`** 的 SSE **`delta`** 为 **`format_call_tool_result` 原文**（如 `pong`），assistant 落库同为原文。  
+   - **目标**：工具执行后，将结果 + 用户问题再交 **Ollama 流式** 生成自然语言 **`delta`**；**`meta`** 可保留 **`mcp_raw`** 备查。建议 **`.env`** 开关 **`MCP_REPLY_VIA_LLM`**。  
+   - **涉及**：**`chat_stream.py`**（mcp 分支）或抽出 **`mcp_turn.py`**。  
 
-2. **聊天记录精炼**  
-   - **已实现**：精炼落库 + **`messages`** 首条 **`system`** 携带摘要；**`conversation_refine`** 已增加 JSON 围栏/前缀兜底（见 **`docs/changelog.md`**）。  
-   - **可选演进**：过长摘要再压缩、或更早轮次 user 条目不重复进 **`messages`** 等。  
+2. **后端动作细分（SSE 协议扩展）**  
+   - **目标**：在调工具前后增加 **`tool_call`** / **`tool_result`** 事件（**`utils/sse_events.py`**），与面向用户的 **`delta`** 分离；前端可折叠展示工具原始输出。  
+   - **可选**：**`MCP_ALLOWED_TOOLS`** 环境变量白名单（**`mcp_config` + `route_auto` + mcp 分支** 双重校验）。  
+   - **文档**：落地后更新 **`docs/chat-stream-api.md` §3**。  
 
-3. **会话 HTTP**  
-   - **已实现**：**`GET /conversation/list`**、**`GET /conversation/{id}/messages`**、**`POST /conversation/delete`**、**`POST /conversation/create`**（见 **`docs/conversations-api.md`**）。  
-   - **可选**：为 create/delete 补 **`pytest`**；列表选中项在精炼后**与列表 refetch 同步**（避免右侧标题仍显示「会话 id」直至重选）。  
+3. **传输层：SSE 与 WebSocket（视情况）**  
+   - **当前**：**`POST /chat/stream`** + **SSE** 已满足「单向流式推送 + 一轮一请求」；**`chat`** 多 **`delta`**、**`mcp`** 通常少量事件，**不必为润色单独上 WebSocket**。  
+   - **考虑升级 WebSocket 的时机**：需要**服务端主动推送**（多轮 agent 步骤、长任务进度、取消/心跳）、**双向频繁信令**，或前端强依赖单连接多路复用时再评估。  
+   - **若暂不上 WS**：继续 SSE；润色与 **`tool_*`** 仍用同一 **`text/event-stream`** 连接即可。  
 
-4. **前端对接（除 MCP 外）**  
-   - **会话**：列表/历史/删除/新建与 **`docs/conversations-api.md`** 对齐。  
-   - **流式**：**SSE** **`done`** 中的 **`conversation_id` / `turn_id`**；**`plan`** 非占位后的文案联调。  
+4. **前端对接**  
+   - 默认或可选 **`routing: "auto"`**；解析 **`delta` / `error` / `done`**（后续 **`tool_call` / `tool_result`**）。  
+   - 会话 API 与 **`docs/conversations-api.md`** 对齐。  
 
-5. **其它后端**：按需补 **`POST /chat` 非流式**；对照 **`docs/backend-refactor-plan.md`** 扩展时同步 **`readme.md`** 与本 **`changelog`**。
+5. **其它（排后）**  
+   - **`routing=plan`** 真实实现（**`PlanOutline`**，见 **`schemas/planning.py`**）。  
+   - **`routing=auto` 的 pytest** mock、**`mcp` 分支 `refine_memory_summary`**、**`POST /chat` 非流式**。  
+   - 对照 **`docs/backend-refactor-plan.md`** 扩展时同步 **`changelog`**。
 
 ---
 

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, field_validator
 
-from src.types import RoutingMode
+from src.types import ArgsDict, RoutingMode
 
 
 class ChatRequest(BaseModel):
@@ -12,6 +12,12 @@ class ChatRequest(BaseModel):
     )
     routing: RoutingMode = Field(
         default="auto", description="auto=自动判别：chat/plan/mcp=强制走对应链路"
+    )
+    mcp_tool: str | None = Field(
+        default=None, description="routing=mcp 时要调用的工具名"
+    )
+    mcp_arguments: ArgsDict = Field(
+        default_factory=dict, description="传给 tools/call 的参数"
     )
 
     @field_validator("message")

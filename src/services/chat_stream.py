@@ -3,15 +3,15 @@ import uuid
 from collections.abc import Iterator
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+import anyio
 from sqlalchemy.orm import Session
 
-from src.llm.messages import conversation_rows_to_messages
 from src.llm.streaming import iter_ollama_chat_chunks
 from src.models.conversation import Conversation, ConversationKind
 from src.models.conversation_messages import ConversationMessage, MessageRole
 from src.schemas.chat import ChatRequest
-from src.types import MessageMode
+from src.services.chat_context import build_chat_model_messages
+from src.services.mcp_client import format_call_tool_result, mcp_call_tool_async
 from src.utils.sse_events import (
     build_delta_event,
     build_done_event,
@@ -20,18 +20,9 @@ from src.utils.sse_events import (
 )
 
 from .conversation_refine import refine_memory_summary
+from .route_auto import AutoRouteResult, decide_route_auto
 
 logger = logging.getLogger(__name__)
-
-
-def decide_route_auto(message: str) -> MessageMode:
-    return "chat"
-
-
-def resolve_effective_route(body: ChatRequest) -> MessageMode:
-    if body.routing != "auto":
-        return body.routing
-    return decide_route_auto(body.message)
 
 
 def stream_chat_turn(body: ChatRequest, db: Session) -> Iterator[str]:
@@ -39,7 +30,12 @@ def stream_chat_turn(body: ChatRequest, db: Session) -> Iterator[str]:
     turn_id = uuid.uuid4().hex[:32]  # 保证不超过 VARCHAR(50)
     conv_id: int | None = None
 
-    effective_route = resolve_effective_route(body)
+    auto_decision: AutoRouteResult | None = None
+    if body.routing == "auto":
+        auto_decision = decide_route_auto(body.message)
+        effective_route = auto_decision["route"]
+    else:
+        effective_route = body.routing
 
     if effective_route == "chat":
         try:
@@ -66,7 +62,7 @@ def stream_chat_turn(body: ChatRequest, db: Session) -> Iterator[str]:
                     role=MessageRole.user,
                     content=body.message,
                     turn_id=turn_id,
-                    meta={"routing": body.routing},
+                    meta={"routing": body.routing, "effective_route": effective_route},
                 )
             )
             db.flush()
@@ -82,19 +78,10 @@ def stream_chat_turn(body: ChatRequest, db: Session) -> Iterator[str]:
             except Exception:
                 logger.exception("refine_memory_summary failed")
 
-            stmt = (
-                select(ConversationMessage)
-                .where(ConversationMessage.conversation_id == conv_id)
-                .order_by(ConversationMessage.id.desc())
-                .limit(40)
-            )
-            rows_list = db.scalars(stmt).all()
-            rows = list(reversed(rows_list))
-
             parts: list[str] = []
             try:
-                messages = conversation_rows_to_messages(
-                    rows, conv.memory_summary or ""
+                messages = build_chat_model_messages(
+                    db, conv_id, conv.memory_summary or ""
                 )
                 for chunk in iter_ollama_chat_chunks(messages):
                     parts.append(chunk)
@@ -124,6 +111,72 @@ def stream_chat_turn(body: ChatRequest, db: Session) -> Iterator[str]:
         yield sse_line(build_error_event("计划链路尚未接入"))
         yield sse_line(build_done_event(None, turn_id))
     elif effective_route == "mcp":
-        db.rollback()
-        yield sse_line(build_error_event("mcp 链路尚未接入"))
-        yield sse_line(build_done_event(None, turn_id))
+        try:
+            if body.routing == "auto" and auto_decision:
+                tool_name = (auto_decision.get("mcp_tool") or "").strip()
+                tool_args = auto_decision.get("mcp_arguments") or {}
+            else:
+                tool_name = (body.mcp_tool or "").strip()
+                tool_args = body.mcp_arguments or {}
+
+            if not tool_name:
+                yield sse_line(build_error_event("routing=mcp 时请传 mcp_tool"))
+                yield sse_line(build_done_event(None, turn_id))
+                return
+
+            if body.conversation_id is None:
+                conv = Conversation(
+                    kind=ConversationKind.mcp,
+                    memory_summary="",
+                    extra_json={},
+                )
+                db.add(conv)
+                db.flush()
+                conv_id = conv.id
+            else:
+                conv = db.get(Conversation, body.conversation_id)
+                if conv is None:
+                    yield sse_line(build_error_event("会话不存在"))
+                    yield sse_line(build_done_event(None, turn_id))
+                    return
+                conv_id = conv.id
+
+            db.add(
+                ConversationMessage(
+                    conversation_id=conv_id,
+                    role=MessageRole.user,
+                    content=body.message,
+                    turn_id=turn_id,
+                    meta={
+                        "routing": body.routing,
+                        "effective_route": effective_route,
+                        "mcp_tool": tool_name,
+                        "mcp_arguments": tool_args,
+                    },
+                )
+            )
+            db.flush()
+
+            try:
+                result = anyio.run(mcp_call_tool_async, tool_name, tool_args)
+                text = format_call_tool_result(result)
+                yield sse_line(build_delta_event(text))
+
+                db.add(
+                    ConversationMessage(
+                        conversation_id=conv_id,
+                        role=MessageRole.assistant,
+                        content=text,
+                        turn_id=turn_id,
+                        meta={"mcp_tool": tool_name},
+                    )
+                )
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.exception("mcp_call_tool failed")
+                yield sse_line(build_error_event(str(e) or "MCP 调用失败"))
+
+        finally:
+            if conv_id is not None:
+                yield sse_line(build_done_event(conv_id, turn_id))

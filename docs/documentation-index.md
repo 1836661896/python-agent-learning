@@ -40,4 +40,4 @@
 
 ---
 
-*修订：2026-05-09 建立文档体系索引；2026-05-10 增加 **`docs/chat-stream-api.md`** 索引；2026-05-12 增加 **`docs/conversations-api.md`** 索引（会话 **list/messages/delete/create**）；2026-05-12 同步 **`chat-stream-api.md` §6 MCP 规划** 与 **`readme.md` §7** 下一优先（真正接入 MCP）。*
+*修订：2026-05-09 建立文档体系索引；2026-05-10 增加 **`docs/chat-stream-api.md`** 索引；2026-05-12 增加 **`docs/conversations-api.md`** 索引；2026-05-16 同步 **`routing=mcp`** 与 **`routing=auto`**（**`route_auto.py`**）；**`readme.md` §7** 下一优先为 **MCP 润色**、SSE **`tool_*`**、白名单；**WebSocket 暂非必须**。*

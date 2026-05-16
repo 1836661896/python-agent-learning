@@ -1,9 +1,8 @@
-"""`stream_chat_turn` 与占位路由：尽量 mock，少依赖真实 Ollama / 数据库。"""
+"""`stream_chat_turn`：chat / plan 占位 / mcp（mock）。"""
 
 import json
 from unittest.mock import MagicMock
 
-import pytest
 from sqlalchemy import delete, select
 
 from src.schemas.chat import ChatRequest
@@ -40,14 +39,64 @@ def test_stream_plan_placeholder_calls_rollback():
     assert ps[-1]["type"] == "done"
 
 
-def test_stream_mcp_placeholder_calls_rollback():
+def test_stream_mcp_missing_mcp_tool():
     db = MagicMock()
-    body = ChatRequest(message="x", routing="mcp")
+    body = ChatRequest(message="x", routing="mcp", mcp_tool=None)
     chunks = list(stream_chat_turn(body, db))
-    db.rollback.assert_called_once()
     ps = _sse_payloads(chunks)
     assert ps[0]["type"] == "error"
+    assert "mcp_tool" in ps[0]["msg"]
     assert ps[-1]["type"] == "done"
+    assert ps[-1]["conversation_id"] is None
+    db.commit.assert_not_called()
+
+
+def test_stream_mcp_unknown_conversation():
+    db = MagicMock()
+    db.get.return_value = None
+    body = ChatRequest(
+        message="x", conversation_id=999001, routing="mcp", mcp_tool="ping"
+    )
+    chunks = list(stream_chat_turn(body, db))
+    ps = _sse_payloads(chunks)
+    assert ps[0]["type"] == "error"
+    assert "不存在" in ps[0]["msg"]
+    assert ps[-1]["conversation_id"] is None
+    db.commit.assert_not_called()
+
+
+def test_stream_mcp_calls_tool_success(monkeypatch):
+    from mcp.types import CallToolResult, TextContent
+
+    conv = MagicMock()
+    conv.id = 42
+    conv.memory_summary = ""
+    db = MagicMock()
+    db.get.return_value = conv
+
+    async def _fake_call(name, arguments=None):
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"ok:{name}")], isError=False
+        )
+
+    monkeypatch.setattr("src.services.chat_stream.mcp_call_tool_async", _fake_call)
+
+    body = ChatRequest(
+        message="测",
+        conversation_id=42,
+        routing="mcp",
+        mcp_tool="ping",
+        mcp_arguments={},
+    )
+
+    chunks = list(stream_chat_turn(body, db))
+    ps = _sse_payloads(chunks)
+    deltas = [p for p in ps if p["type"] == "delta"]
+    assert len(deltas) == 1
+    assert deltas[0]["text"] == "ok:ping"
+    assert ps[-1]["type"] == "done"
+    assert ps[-1]["conversation_id"] == 42
+    db.commit.assert_called_once()
 
 
 def test_stream_chat_refine_fails_no_system_in_ollama_messages(monkeypatch):
@@ -119,7 +168,9 @@ def test_stream_chat_persists_and_sse_order(requires_postgres, monkeypatch):
     db = SessionLocal()
     conv_id: int | None = None
     try:
-        body = ChatRequest(message="integration hi", conversation_id=None, routing="chat")
+        body = ChatRequest(
+            message="integration hi", conversation_id=None, routing="chat"
+        )
         chunks = list(stream_chat_turn(body, db))
         ps = _sse_payloads(chunks)
         deltas = [p for p in ps if p["type"] == "delta"]

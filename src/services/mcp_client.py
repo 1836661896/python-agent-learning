@@ -47,3 +47,26 @@ async def mcp_list_tools_async():
 async def mcp_call_tool_async(name: str, arguments: ArgsDict | None = None):
     """tools/call： 返回 CallToolResult。"""
     return await _run_with_mcp_session(lambda s: s.call_tool(name, arguments))
+
+
+def format_call_tool_result(result) -> str:
+    """把 tools/call 的 CallToolResult 转化成可展示文本。"""
+    if getattr(result, "isError", False):
+        parts = []
+        for block in result.content or []:
+            if getattr(block, "type", None) == "text":
+                parts.append(block.text)
+        return "工具执行失败：\n" + ("\n".join(parts) if parts else "未知错误")
+
+    parts: list[str] = []
+    for block in result.content or []:
+        if getattr(block, "type", None) == "text":
+            parts.append(block.text)
+    if parts:
+        return "\n".join(parts)
+    sc = getattr(result, "structuredContent", None)
+    if sc:
+        import json
+
+        return json.dumps(sc, ensure_ascii=False, indent=2)
+    return "(工具无文本返回)"
