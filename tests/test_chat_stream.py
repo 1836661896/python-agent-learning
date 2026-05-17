@@ -80,6 +80,7 @@ def test_stream_mcp_calls_tool_success(monkeypatch):
         )
 
     monkeypatch.setattr("src.services.chat_stream.mcp_call_tool_async", _fake_call)
+    monkeypatch.setattr("src.services.chat_stream.config.mcp_reply_via_llm", False)
 
     body = ChatRequest(
         message="测",
@@ -91,15 +92,110 @@ def test_stream_mcp_calls_tool_success(monkeypatch):
 
     chunks = list(stream_chat_turn(body, db))
     ps = _sse_payloads(chunks)
+
+    assert ps[0]["type"] == "tool_call"
+    assert ps[0]["tool"] == "ping"
+    assert ps[0]["arguments"] == {}
+
+    assert ps[1]["type"] == "tool_result"
+    assert ps[1]["text"] == "ok:ping"
+    assert ps[1].get("is_error") is not True
+
     deltas = [p for p in ps if p["type"] == "delta"]
     assert len(deltas) == 1
     assert deltas[0]["text"] == "ok:ping"
+
     assert ps[-1]["type"] == "done"
     assert ps[-1]["conversation_id"] == 42
     db.commit.assert_called_once()
 
 
-def test_stream_chat_refine_fails_no_system_in_ollama_messages(monkeypatch):
+def test_stream_chat_injects_preset_system(monkeypatch):
+    from src.models.conversation_messages import MessageRole
+
+    conv = MagicMock()
+    conv.id = 1
+    conv.memory_summary = ""
+    conv.extra_json = {}
+    db = MagicMock()
+    db.get.return_value = conv
+
+    user_row = MagicMock()
+    user_row.role = MessageRole.user
+    user_row.content = "hi"
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [user_row]
+    db.scalars.return_value = scalars_result
+
+    captured: dict[str, list] = {}
+
+    monkeypatch.setattr(
+        "src.services.chat_stream.refine_memory_summary",
+        lambda _old, _title, msg: {"title": "", "summary": ""},
+    )
+
+    def _fake_iter(msgs):
+        captured["msgs"] = msgs
+        return iter(["ok"])
+
+    monkeypatch.setattr("src.services.chat_stream.iter_chat_chunks", _fake_iter)
+
+    body = ChatRequest(
+        message="hi", conversation_id=1, routing="chat", preset="schedule"
+    )
+    ps = _sse_payloads(list(stream_chat_turn(body, db)))
+
+    assert all(p["type"] != "tool_call" for p in ps)
+    systems = [m["content"] for m in captured["msgs"] if m["role"] == "system"]
+    assert systems and any("行程规划师" in c for c in systems)
+
+
+def test_stream_auto_schedule_sets_conversation_preset(monkeypatch):
+    from src.models.conversation_messages import MessageRole
+    from src.services.route_auto import AutoRouteResult
+
+    conv = MagicMock()
+    conv.id = 2
+    conv.memory_summary = ""
+    conv.extra_json = {}
+
+    db = MagicMock()
+    db.get.return_value = conv
+
+    user_row = MagicMock()
+    user_row.role = MessageRole.user
+    user_row.content = "规划"
+
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [user_row]
+    db.scalars.return_value = scalars_result
+
+    monkeypatch.setattr(
+        "src.services.chat_stream.decide_route_auto",
+        lambda _msg: AutoRouteResult(
+            route="chat",
+            mcp_tool=None,
+            mcp_arguments={},
+            preset="schedule",
+        ),
+    )
+    monkeypatch.setattr(
+        "src.services.chat_stream.refine_memory_summary",
+        lambda _a, _b, _c: {"title": "", "summary": ""},
+    )
+    monkeypatch.setattr(
+        "src.services.chat_stream.iter_chat_chunks",
+        lambda _msgs: iter(["x"]),
+    )
+
+    body = ChatRequest(message="我想规划行程", conversation_id=2, routing="auto")
+    list(stream_chat_turn(body, db))
+
+    assert conv.extra_json.get("preset") == "schedule"
+
+
+def test_stream_chat_refine_fails_no_system_in_chat_messages(monkeypatch):
     """精炼失败时 memory_summary 仍为空，传给流式的 messages 不应带 system。"""
     from src.models.conversation import Conversation, ConversationKind
     from src.models.conversation_messages import MessageRole
@@ -129,7 +225,7 @@ def test_stream_chat_refine_fails_no_system_in_ollama_messages(monkeypatch):
 
     monkeypatch.setattr("src.services.chat_stream.refine_memory_summary", _fail_refine)
     monkeypatch.setattr(
-        "src.services.chat_stream.iter_ollama_chat_chunks",
+        "src.services.chat_stream.iter_chat_chunks",
         _fake_iter,
     )
 
@@ -154,14 +250,14 @@ def test_stream_chat_persists_and_sse_order(requires_postgres, monkeypatch):
             "summary": f"REF:{msg}",
         },
     )
-    ollama_msgs: dict[str, list] = {}
+    chat_msgs: dict[str, list] = {}
 
     def _fake_iter(msgs):
-        ollama_msgs["list"] = msgs
+        chat_msgs["list"] = msgs
         return iter(["aa", "bb"])
 
     monkeypatch.setattr(
-        "src.services.chat_stream.iter_ollama_chat_chunks",
+        "src.services.chat_stream.iter_chat_chunks",
         _fake_iter,
     )
 
@@ -194,7 +290,7 @@ def test_stream_chat_persists_and_sse_order(requires_postgres, monkeypatch):
         assert roles == ["user", "assistant"]
         assert msgs[1].content == "aabb"
 
-        sent = ollama_msgs.get("list", [])
+        sent = chat_msgs.get("list", [])
         assert len(sent) >= 2
         assert sent[0]["role"] == "system"
         assert "REF:integration hi" in sent[0]["content"]
@@ -210,3 +306,34 @@ def test_stream_chat_persists_and_sse_order(requires_postgres, monkeypatch):
             db.execute(delete(Conversation).where(Conversation.id == conv_id))
             db.commit()
         db.close()
+
+
+def test_stream_mcp_tool_call_fails(monkeypatch):
+    conv = MagicMock()
+    conv.id = 42
+    db = MagicMock()
+    db.get.return_value = conv
+
+    async def _boom(name, arguments=None):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("src.services.chat_stream.mcp_call_tool_async", _boom)
+
+    body = ChatRequest(
+        message="测",
+        conversation_id=42,
+        routing="mcp",
+        mcp_tool="ping",
+        mcp_arguments={},
+    )
+
+    chunks = list(stream_chat_turn(body, db))
+    ps = _sse_payloads(chunks)
+
+    assert ps[0]["type"] == "tool_call"
+    assert ps[1]["type"] == "tool_result"
+    assert ps[1].get("is_error") is True
+    assert "boom" in ps[1]["text"]
+    assert any(p["type"] == "error" for p in ps)
+    assert ps[-1]["type"] == "done"
+    db.commit.assert_not_called()

@@ -29,8 +29,11 @@ def build_chat_model_messages(
     conversation_id: int,
     memory_summary: str,
     *,
+    extra_system: str | None = None,
     history_limit: int = DEFAULT_CHAT_HISTORY_LIMIT,
 ) -> ChatMessageList:
     """拼装 Ollama 所需的 messages（摘要 system + 最近若干条角色对话）。"""
     rows = load_recent_conversation_rows(db, conversation_id, limit=history_limit)
-    return conversation_rows_to_messages(rows, memory_summary)
+    return conversation_rows_to_messages(
+        rows, memory_summary, extra_system=extra_system
+    )

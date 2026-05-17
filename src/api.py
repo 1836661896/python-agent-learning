@@ -5,6 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+import src.env  # noqa: F401  # 副作用：加载 .env
 from src.api_response import fail, success
 from src.routers.chat import router as chat_router
 from src.routers.conversations import router as conversation_router

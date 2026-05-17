@@ -1,44 +1,43 @@
-"""`complete_ollama_chat`：mock httpx，不访问真实 Ollama。"""
+"""`complete_chat`：mock provider，不访问真实 LLM。"""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 
-@patch("src.llm.completion.httpx.Client")
-def test_complete_ollama_chat_returns_stripped_content(mock_client_cls):
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.json.return_value = {"message": {"content": "  hello world  "}}
+def test_complete_chat_returns_stripped_content(monkeypatch):
+    mock_provider = MagicMock()
+    mock_provider.complete.return_value = "  hello world  "
 
-    mock_ctx = MagicMock()
-    mock_ctx.post.return_value = mock_resp
-    mock_ctx.__enter__ = MagicMock(return_value=mock_ctx)
-    mock_ctx.__exit__ = MagicMock(return_value=False)
-    mock_client_cls.return_value = mock_ctx
+    monkeypatch.setattr(
+        "src.llm.completion.get_provider",
+        lambda _name=None: mock_provider,
+    )
 
-    from src.llm.completion import complete_ollama_chat
+    from src.llm.completion import complete_chat
 
-    out = complete_ollama_chat([{"role": "user", "content": "hi"}])
-    assert out == "hello world"
-    call_kw = mock_ctx.post.call_args.kwargs["json"]
-    assert call_kw["stream"] is False
-    assert call_kw["messages"] == [{"role": "user", "content": "hi"}]
+    out = complete_chat([{"role": "user", "content": "hi"}])
+    assert out == "  hello world  "
+    mock_provider.complete.assert_called_once_with(
+        [{"role": "user", "content": "hi"}]
+    )
 
 
-@patch("src.llm.completion.httpx.Client")
-def test_complete_ollama_chat_empty_raises(mock_client_cls):
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.json.return_value = {"message": {"content": "   "}}
+def test_complete_chat_uses_fallback_on_primary_error(monkeypatch):
+    primary = MagicMock()
+    primary.complete.side_effect = RuntimeError("down")
+    fallback = MagicMock()
+    fallback.complete.return_value = "ok"
 
-    mock_ctx = MagicMock()
-    mock_ctx.post.return_value = mock_resp
-    mock_ctx.__enter__ = MagicMock(return_value=mock_ctx)
-    mock_ctx.__exit__ = MagicMock(return_value=False)
-    mock_client_cls.return_value = mock_ctx
+    def _get_provider(name):
+        if name == "ollama":
+            return fallback
+        return primary
 
-    from src.llm.completion import complete_ollama_chat
+    monkeypatch.setattr("src.llm.completion.config.llm_provider", "zhipu")
+    monkeypatch.setattr("src.llm.completion.config.llm_fallback_provider", "ollama")
+    monkeypatch.setattr("src.llm.completion.get_provider", _get_provider)
 
-    with pytest.raises(ValueError, match="返回数据为空"):
-        complete_ollama_chat([{"role": "user", "content": "x"}])
+    from src.llm.completion import complete_chat
+
+    assert complete_chat([{"role": "user", "content": "x"}]) == "ok"

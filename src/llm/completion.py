@@ -1,21 +1,24 @@
-import httpx
+import logging
 
+from src.providers import get_provider
 from src.types import ChatMessageList
 
-from .config import base, model, timeout
+from . import config
+
+logger = logging.getLogger(__name__)
 
 
-def complete_ollama_chat(messages: ChatMessageList) -> str:
-    url = f"{base}/api/chat"
-    with httpx.Client(timeout=timeout, trust_env=False) as client:
-        resp = client.post(
-            url, json={"model": model, "messages": messages, "stream": False}
-        )
-        resp.raise_for_status()
+def complete_chat(messages: ChatMessageList) -> str:
+    primary = config.llm_provider
+    fallback = config.llm_fallback_provider
 
-        data = resp.json()
-        message = data.get("message") or {}
-        assistant = message.get("content") or ""
-        if not assistant or not assistant.strip():
-            raise ValueError("返回数据为空")
-        return assistant.strip()
+    def _run(name: str) -> str:
+        return get_provider(name).complete(messages)
+
+    try:
+        return _run(primary)
+    except Exception:
+        if fallback and fallback != primary:
+            logger.warning("LLM provider %s failed, fallback to %s", primary, fallback)
+            return _run(fallback)
+        raise

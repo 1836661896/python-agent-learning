@@ -15,7 +15,9 @@
 | 4 | **`.cursor/rules/*.mdc`** | **助手行为与教学规则**（是否可改 `.py`、讲解语言、节奏等）+ **`python-study-plan.mdc` / `python-learning-checklist.mdc`** 学习路线与知识点 | 规则变化、阶段推进、清单勾选时更新 |
 | 5 | **`docs/collaboration-and-coding-rules.md`** | **人类可读**的协作与编码约定摘要，并**指向** `.cursor/rules` 中权威规则 | 与 `.cursor/rules` 同步补充（避免两处长期矛盾） |
 | 6 | **`.cursor/rules/user-profile.mdc`** | **个人画像**：背景、偏好、进度摘要；**便于长期配合** | 用户表达新偏好、进度跃迁、**或本次更新了规划类文档且可能影响协作方式**时更新 |
-| — | **`docs/chat-stream-api.md`** | **`POST /chat/stream`** 的协议说明（SSE、**`routing`**、落库、精炼与历史窗口） | **`chat_stream` / 路由 / 事件形态变更**时更新 |
+| — | **`docs/llm-providers.md`** | **LLM 多提供商**：**`src/env.py`**、**`providers/`**、**`complete_chat` / `iter_chat_chunks`**、**.env** 与自测 | **新增/切换厂商**或 **env 加载方式**变更时更新 |
+| — | **`docs/chat-stream-api.md`** | **`POST /chat/stream`** 的协议说明（SSE、**`routing`**、**`preset`**、落库、精炼与历史窗口） | **`chat_stream` / 路由 / 事件形态变更**时更新 |
+| — | **`docs/agent-presets.md`** | **Agent Preset**：**`src/prompts/presets/`**、**`agent_presets.py`**、与 MCP 分工、扩展检查清单 | **新增/修改 preset** 或 **注入 system** 逻辑变更时更新 |
 | — | **`docs/conversations-api.md`** | **会话 HTTP**：**`GET /conversation/list`**、**`GET /conversation/{id}/messages`**、**`POST /conversation/delete`**、**`POST /conversation/create`**（分页、**`data`/`fail`**、**§5 测试**） | **`routers/conversations.py`** 或 **`schemas/conversations.py`** 变更时更新 |
 | — | **`docs/backend-refactor-plan.md`** | 后端**具体重构执行清单**（删路由、改 Planner、测试与勾选） | 按重构阶段推进时更新 |
 | — | **`docs/product-and-refactor-vision.md`** | **重构与工程原则**（与产品目标交叉部分以 `project-goals.md` 为准） | 重构策略、同仓库迁移方式等共识变化时更新 |
@@ -28,6 +30,7 @@
 |------|------|
 | **`.cursor/rules/project-goal-advanced-agent.mdc`** | 长期产品方向（自动化、视觉、高级 Agent）的**方向性**约束 |
 | **`frontend/readme.md`** | 前端目录、阶段与联调说明 |
+| **`../mcp-server/readme.md`** | MCP Server 当前真相；工具与 **`exports/`**；协作文档与 backend **`.cursor/rules` 约束一致** |
 
 ---
 
@@ -40,4 +43,4 @@
 
 ---
 
-*修订：2026-05-09 建立文档体系索引；2026-05-10 增加 **`docs/chat-stream-api.md`** 索引；2026-05-12 增加 **`docs/conversations-api.md`** 索引；2026-05-16 同步 **`routing=mcp`** 与 **`routing=auto`**（**`route_auto.py`**）；**`readme.md` §7** 下一优先为 **MCP 润色**、SSE **`tool_*`**、白名单；**WebSocket 暂非必须**。*
+*修订：2026-05-09 建立文档体系索引；2026-05-10 增加 **`docs/chat-stream-api.md`** 索引；2026-05-12 增加 **`docs/conversations-api.md`** 索引；2026-05-16 增加 **`docs/llm-providers.md`**；2026-05-17 增加 **`docs/agent-presets.md`**；**`readme.md` §7** 下一优先为 **mcp-server**（导出工具、下线 guide tool）、**前端 preset/工具事件**。*

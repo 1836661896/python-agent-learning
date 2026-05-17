@@ -1,41 +1,26 @@
-import json
+import logging
 from typing import Generator
 
-import httpx
-
+from src.providers import get_provider
 from src.types import ChatMessageList
 
-from .config import base, model, timeout
+from . import config
+
+logger = logging.getLogger(__name__)
 
 
-def iter_ollama_chat_chunks(messages: ChatMessageList) -> Generator[str, None, None]:
-    url = f"{base}/api/chat"
-    with httpx.Client(timeout=timeout, trust_env=False) as client:
-        with client.stream(
-            "POST",
-            url,
-            json={
-                "model": model,
-                "messages": messages,
-                "stream": True,
-            },
-        ) as resp:
-            resp.raise_for_status()
+def iter_chat_chunks(messages: ChatMessageList) -> Generator[str, None, None]:
+    primary = config.llm_provider
+    fallback = config.llm_fallback_provider
 
-            for line in resp.iter_lines():
-                if not line or not line.strip():
-                    continue
-                if line.startswith("data: "):
-                    line = line.split("data: ")[-1]
-                try:
-                    msg = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                message = msg.get("message") or {}
-                content = message.get("content", "")
-                if not content or not content.strip():
-                    continue
-                yield content
+    def _run(name: str) -> Generator[str, None, None]:
+        yield from get_provider(name).iter_chunks(messages)
 
-                if msg.get("done") is True:
-                    break
+    try:
+        yield from _run(primary)
+    except Exception:
+        if fallback and fallback != primary:
+            logger.warning("LLM provider %s failed, fallback to %s", primary, fallback)
+            yield from _run(fallback)
+        else:
+            raise

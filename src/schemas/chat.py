@@ -19,6 +19,9 @@ class ChatRequest(BaseModel):
     mcp_arguments: ArgsDict = Field(
         default_factory=dict, description="传给 tools/call 的参数"
     )
+    preset: str | None = Field(
+        default=None, description="Agent 身份 preset，如 schedule=行程规划师"
+    )
 
     @field_validator("message")
     @classmethod

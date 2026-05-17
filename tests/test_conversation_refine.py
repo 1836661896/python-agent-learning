@@ -1,4 +1,4 @@
-"""`refine_memory_summary`：mock `complete_ollama_chat`，不访问模型。"""
+"""`refine_memory_summary`：mock `complete_chat`，不访问模型。"""
 
 from unittest.mock import MagicMock
 
@@ -14,7 +14,7 @@ def test_refine_memory_summary_calls_completion(monkeypatch):
         calls.append(messages)
         return '{"title":"短标题","summary":"  新摘要一段  "}'
 
-    monkeypatch.setattr(cr, "complete_ollama_chat", _fake_complete)
+    monkeypatch.setattr(cr, "complete_chat", _fake_complete)
 
     out = cr.refine_memory_summary("旧摘要", "旧标题", "本轮用户话")
     assert out["summary"].strip() == "新摘要一段"
@@ -29,7 +29,7 @@ def test_refine_memory_summary_calls_completion(monkeypatch):
 def test_refine_memory_summary_empty_user_raises(monkeypatch):
     from src.services import conversation_refine as cr
 
-    monkeypatch.setattr(cr, "complete_ollama_chat", MagicMock(return_value="x"))
+    monkeypatch.setattr(cr, "complete_chat", MagicMock(return_value="x"))
 
     with pytest.raises(ValueError, match="用户消息不能为空"):
         cr.refine_memory_summary("", "", "   ")
@@ -40,7 +40,7 @@ def test_refine_memory_summary_strips_markdown_fence(monkeypatch):
 
     wrapped = '```json\n{"title":"围栏内","summary":"摘要"}\n```'
 
-    monkeypatch.setattr(cr, "complete_ollama_chat", lambda _m: wrapped)
+    monkeypatch.setattr(cr, "complete_chat", lambda _m: wrapped)
 
     out = cr.refine_memory_summary("", "", "hi")
     assert out["title"] == "围栏内"
@@ -52,7 +52,7 @@ def test_refine_memory_summary_strips_prefix_prose(monkeypatch):
 
     wrapped = '好的，如下：\n{"title":"前缀后","summary":"摘要二"}'
 
-    monkeypatch.setattr(cr, "complete_ollama_chat", lambda _m: wrapped)
+    monkeypatch.setattr(cr, "complete_chat", lambda _m: wrapped)
 
     out = cr.refine_memory_summary("", "", "hi")
     assert out["title"] == "前缀后"

@@ -226,6 +226,6 @@ alwaysApply: true
 ## 当前进度与下一步（与 readme 同步）
 
 - **已完成（以根目录 `readme.md` §3 功能模块表为准）**：阶段 0～8 关键能力已具备；数据库 + ORM + 迁移；**`/chat` / `/chat/stream`（SSE）**、planner、MCP、**会话记忆**、**`GET /events`**、**doc-sessions 支线**、Docker compose、多提供商 LLM 等 — **详细日期与条目见 `docs/changelog.md`**。
-- **建议下一步**：见 **`readme.md` → §7 下一次学习的起点**（当前主线：**MCP 结果 LLM 润色**、SSE **`tool_call`/`tool_result`**、工具白名单；**`routing=auto`** 已实现；WebSocket 视情况；前端 **`routing: "auto"`**）。
+- **建议下一步**：见 **`readme.md` → §7**（**mcp-server** 导出工具与下线 guide tool；**前端** preset 与工具事件；backend preset/auto 已收尾）。
 - **提交前文档**：更新 **`readme.md`（§3、§7）** 与 **`docs/changelog.md`**；**`docs/project-goals.md`** 仅在产品目标变化时更新；产品边界见 **`readme.md` §3.1** 与 **`docs/project-goals.md`**。
 - **新对话 / 换设备**：先读 **`readme.md`**、**`docs/documentation-index.md`**、本文件、**`python-learning-checklist.mdc`**、**`user-profile.mdc`**。

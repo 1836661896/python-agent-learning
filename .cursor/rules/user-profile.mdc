@@ -36,8 +36,9 @@ alwaysApply: true
 ## 项目与进度（随学习更新）
 
 - **项目性质**：学习项目；首要目标是**学会**，其次才是完成功能。
-- **当前进度**：后端以根目录 **`readme.md` §3** 为准：**`POST /chat/stream`** 支持 **`chat`**、显式 **`mcp`**、**`routing=auto`**（**`route_auto.py`**：list_tools + LLM 选 chat/mcp）；**`chat_context`**、**`mcp_client`**、会话 HTTP。**MCP 的 `delta` 仍为工具原文**，尚未 LLM 润色；SSE 尚无 **`tool_call`/`tool_result`**。**变更流水**见 **`docs/changelog.md`**。
-- **近期目标（与 `readme.md` §7 同步）**：**MCP 返回值润色**（**`MCP_REPLY_VIA_LLM`**）、**后端动作细分**（SSE **`tool_*`**、可选 **`MCP_ALLOWED_TOOLS`**）；**WebSocket 视需求再定**（当前 SSE 够用）。其后：**前端 `routing: "auto"`**、**`plan`** 真实实现。
+- **当前进度**：**`POST /chat/stream`**：**`chat`/`mcp`/`auto`**；**`preset=schedule`**（**`src/prompts/presets/`**）；**`route_auto`** 不写死 MCP 工具名；**`mcp`** 发 **`tool_call`→`tool_result`→`delta`**。以 **`readme.md` §3** 为准；**`docs/changelog.md`** 记流水。
+- **近期目标（与 `readme.md` §7 同步）**：**mcp-server**（**`export_schedule_document`**、下线 **`get_schedule_planning_guide`**）；**前端** preset 入口与 **`tool_call`/`tool_result`**。**backend 本阶段告一段落**。  
+- **mcp-server 文档/规则（2026-05-17）**：已与 backend 对齐 **`readme` §1–§9**、**`collaboration-and-coding-rules`**、**`.cursor/rules`**；进度见 **`../mcp-server/readme.md` §3**。
 - **前端**：**React**（`myproject/frontend`），与后端 API 联调；进度见 **`frontend/readme.md`**。
 - **多设备/新对话**：会换设备或新开 Cursor 窗口；依赖 **`readme.md`**、**`docs/documentation-index.md`**、**`study-plan`**、**`checklist`** 同步进度；希望助手在新对话时先读上述文档再继续。
 - **文档体系（2026-05-09）**：用户要求区分 **readme（当前真相）** / **changelog（详细变更）** / **project-goals（目标、少改）** / **`.cursor/rules`（助手硬规则）** / **`docs/collaboration-and-coding-rules.md`（人类可读摘要）** / **本画像**；并要求助手在**修改规划类文档后及时更新对用户的理解**。

@@ -7,7 +7,10 @@ def build_user_message(text: str) -> ChatMessageList:
 
 
 def conversation_rows_to_messages(
-    rows: list[ConversationMessage], memory_summary: str
+    rows: list[ConversationMessage],
+    memory_summary: str,
+    *,
+    extra_system: str | None = None,
 ) -> ChatMessageList:
     s = memory_summary.strip()
     parts: ChatMessageList = []
@@ -22,6 +25,9 @@ def conversation_rows_to_messages(
                 ),
             }
         )
+    extra = (extra_system or "").strip()
+    if extra:
+        parts.append({"role": "system", "content": extra})
     for row in rows:
         part = {"role": row.role.value, "content": row.content}
         parts.append(part)

@@ -19,3 +19,20 @@ def build_done_event(conversation_id: int | None, turn_id: str) -> ArgsDict:
 def build_error_event(msg: str) -> ArgsDict:
     error_event = {"type": "error", "msg": msg}
     return error_event
+
+
+def build_tool_call_event(tool: str, arguments: dict) -> ArgsDict:
+    return {"type": "tool_call", "tool": tool, "arguments": arguments or {}}
+
+
+def build_tool_result_event(
+    tool: str, text: str, *, is_error: bool = False
+) -> ArgsDict:
+    payload: ArgsDict = {
+        "type": "tool_result",
+        "tool": tool,
+        "text": text,
+    }
+    if is_error:
+        payload["is_error"] = True
+    return payload

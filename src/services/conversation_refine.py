@@ -2,37 +2,14 @@ import json
 import textwrap
 from typing import TypedDict
 
-from src.llm.completion import complete_ollama_chat
+from src.llm.completion import complete_chat
 from src.llm.messages import build_user_message
+from src.utils.json_coerce import extract_first_json_object
 
 
 class RefineResult(TypedDict):
     title: str
     summary: str
-
-
-def _coerce_refine_json_text(raw: str) -> str:
-    """把模型返回整理成可被 json.loads 解析的单个 JSON 对象字符串。"""
-    text = (raw or "").strip()
-    if not text:
-        raise ValueError("返回数据为空")
-
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines:
-            lines = lines[1:]
-        while lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-
-    if text.startswith("{"):
-        return text
-
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("返回数据中未找到 JSON 对象")
-    return text[start : end + 1]
 
 
 def refine_memory_summary(
@@ -63,9 +40,9 @@ def refine_memory_summary(
 {user_message.strip()}
 """).strip()
     messages = build_user_message(prompt)
-    raw = complete_ollama_chat(messages).strip()
+    raw = complete_chat(messages).strip()
     try:
-        blob = _coerce_refine_json_text(raw)
+        blob = extract_first_json_object(raw)
         data = json.loads(blob)
     except json.JSONDecodeError as e:
         raise ValueError("返回数据格式错误") from e

@@ -1,9 +1,19 @@
 import os
 
-from dotenv import load_dotenv
 
-load_dotenv()
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "on")
 
-base = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-model = os.getenv("OLLAMA_MODEL", "qwen:7b")
-timeout = 120
+
+# 通用
+timeout = int(os.getenv("LLM_TIMEOUT_SEC", "120"))
+
+
+# 供应商
+llm_provider = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+llm_fallback_provider = os.getenv("LLM_FALLBACK_PROVIDER", "").strip().lower()
+
+mcp_reply_via_llm = _env_bool("MCP_REPLY_VIA_LLM", default=False)
